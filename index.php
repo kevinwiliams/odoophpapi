@@ -259,7 +259,83 @@
        echo json_encode($response, JSON_PRETTY_PRINT);
 
     }
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_REQUEST['e'] == 'inv') {
+        //posted fields
+       $invoiceNumber = $_POST['invoiceNumber'];
+       $partnerId = $_POST['partnerId'];
+       $invoiceDate = $_POST['invoiceDate'];
+       $invoiceDateDue = $_POST['invoiceDateDue'];
+       $accountId = $_POST['accountId'];
+       $journalId = $_POST['journalId'];
+        //connect to odoo
+       include('include/connection/odoo_db.php');
+       require_once('include/ripcord/ripcord.php');
+       $common = ripcord::client("$url/xmlrpc/2/common");
+       $uid = $common->authenticate($db, $username, $password, array());
 
+       if ($uid)
+           echo 'Autheniticated';
+       else
+           echo 'Not authenticated';
+       
+        //load odoo models
+       $models = ripcord::client("$url/xmlrpc/2/object");
+    
+       //create invoice with associated partner_id/customer
+       $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'create', [['move_type' => 'out_invoice', 'partner_id' => $partnerId]]); 
+       $response = [ 'status' => 'success', 'id_created' => $invoiceId ];
+        echo json_encode($response);
+
+        //if ID is created 
+        if (is_int($invoiceId)) {
+            //invoice data
+            $invoiceData = [
+                // 'name' => $invoiceNumber,
+                'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format) //default to today's date if not set
+                //   'invoice_date_due' =>  $invoiceDateDue,
+                //    'journal_id' => $journalId, //journal_id is added by default
+                'company_id' => 1, // Company associated with the invoice
+                'company_currency_id' => 2,
+                'currency_id' => 2, // Currency used in the invoice
+                'invoice_payment_term_id' => 4, //payment terms
+                'invoice_line_ids' => [
+                    [0, false, [
+                        'product_id' => 33, // ID of the product
+                        //'name' => 'Product A', // Name of the product or service ::optional
+                        'quantity' => 1, // Quantity
+                        'price_unit' => 2350.00, // Unit price ::can be overwritten/optional
+                        'account_id' => $accountId, // ID of the account to be used for this line
+                        'tax_ids' => [1] // Tax ID to be applied to product
+                    ]],
+                    [0, false, [
+                        'product_id' => 35, // ID of the product
+                        'name' => 'Product B', // Name of the product or service ::optional
+                        'quantity' => 3,
+                    //    'price_unit' => 1500.00, // Unit price ::can be overwritten/optional
+                        'account_id' => $accountId, // ID of the account to be used for this line
+                        'tax_ids' => [1] // Tax ID to be applied to product
+                    ]]
+                ],
+            ];
+            //update created invoice with journal details
+            $newInvoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$invoiceId],$invoiceData]);
+    
+            $response = [ 'status' => 'success', 'is_updated' => $newInvoiceId ];
+            echo json_encode($response);
+            
+            //POST drafted invoice if information provided is valid
+            if ($newInvoiceId) {
+                $postedInvoice = $models->execute_kw($db, $uid, $password, 'account.move', 'action_post', [$invoiceId]);
+    
+                $response = [ 'status' => 'success', 'invoice' => $postedInvoice ];
+                echo json_encode($response);
+            }
+        }
+        
+       
+
+
+   }
     // Handle other endpoints similarly based on the HTTP method
 
     // Return a 404 response for unsupported endpoints
