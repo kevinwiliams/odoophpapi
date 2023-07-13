@@ -45,8 +45,9 @@ if ($response) {
         [[
             'name' => $item['name'],
             'phone'  => '555' . str_replace("-", "", $item['phone']), //area code required
-            'email'  => str_replace(".com", ".extapi.com", $item['email']),
-            'function' => 'Developer'
+            'email'  =>  $item['email'],
+            'function' => 'Developer',
+            
         ]];
         
         /// --- Insert records in ODOO db

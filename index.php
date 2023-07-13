@@ -34,7 +34,7 @@
         exit;
     }
     
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] == 'contacts') {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_REQUEST['e'] == 'contact') {
         //posted fields
         $name = $_POST['name'];
         $email = $_POST['email'];
@@ -63,7 +63,10 @@
                     'name' => $name,
                     'phone'  => $phone, //area code required
                     'email'  => $email,
-                    'function' => 'Developer'
+                    'company_id' => 1,
+                    // 'commercial_partner_id' => 52,
+                    // 'company_name' => 'My Company (San Francisco)',
+                    'is_company' => false
                 ]];
 
         $new_id = $models->execute_kw($db, $uid, $password, 'res.partner', 'create', $itemData); 
@@ -181,7 +184,7 @@
         echo json_encode($response, JSON_PRETTY_PRINT);
     }
 
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] == 'purchaseorder') {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_REQUEST['e'] == 'purchaseorder') {
         $partnerId = $_POST['name'];
         $orderDate = $_POST['email'];
         $accountId = $_POST['phone'];
@@ -247,7 +250,7 @@
 
     }
 
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] == 'bill') {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_REQUEST['e'] == 'bill') {
 
         //posted fields
         $partnerId = $_POST['name'];
