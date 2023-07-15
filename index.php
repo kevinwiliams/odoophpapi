@@ -99,39 +99,104 @@
          $invoiceNumber = $_POST['invoiceNumber'];
          
         // create payment with associated partner_id/customer
-        $paymentId = $models->execute_kw($db, $uid, $password, 'account.payment', 'create', [['payment_type' => 'inbound', 'partner_id' => $partnerId]]); 
-        $response = [ 'status' => 'success', 'id_created' => $paymentId,];
-        echo json_encode($response);
+        // $paymentId = $models->execute_kw($db, $uid, $password, 'account.payment', 'create', [['payment_type' => 'inbound', 'partner_id' => $partnerId]]); 
+        // $response = [ 'status' => 'success', 'id_created' => $paymentId,];
+        // echo json_encode($response);
+        
+        //Add payment without attaching to an invoice
+        // $paymentData = [
+        //     'partner_id' => $partnerId, // ID of the customer or partner
+        //     'date' => $paymentDate, // Date of the payment (YYYY-MM-DD format)
+        //     // 'journal_id' => $journalId, // ID of the journal for the payment
+        //     // 'payment_type' => 'inbound', // Type of the payment (e.g., 'inbound' for customer payment)
+        //     'payment_method_id' => $paymentMethodId, // ID of the payment method
+        //     'ref' => $invoiceNumber, // Payment communication/reference
+        //     // 'communication' => $invoiceNumber,
+        //     'amount' => 1200.00, // Amount of the payment
+        //     'currency_id' => 2, // ID of the currency used for the payment
+        //     // 'company_currency_id' => 2,
+        //     // 'partner_type' => 'customer', // Type of the partner (e.g., 'customer' or 'supplier')
+        //     'state' => 'posted'
+        // ];
 
          // Fetch invoice ID based on invoice number (e.g., 'USD')
         $invoiceNum = $invoiceNumber;
-        $inoviceId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['payment_reference', '=', $invoiceNum]]]);
-        $inoviceId = $inoviceId[0] ?? false;
-        echo ('inoviceId '. $inoviceId );
+        $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['payment_reference', '=', $invoiceNum]]]);
+        $invoiceId = $invoiceId[0] ?? false;
+        echo ('inoviceId '. $invoiceId );
         // exit;
-        $paymentData = [
-            // 'partner_id' => $partnerId, // ID of the customer or partner
-            'date' => $paymentDate, // Date of the payment (YYYY-MM-DD format)
-            // 'journal_id' => $journalId, // ID of the journal for the payment
-            // 'payment_type' => 'inbound', // Type of the payment (e.g., 'inbound' for customer payment)
-            'payment_method_id' => $paymentMethodId, // ID of the payment method
-            'ref' => $invoiceNumber, // Payment communication/reference
-            'amount' => 1200.00, // Amount of the payment
-            'currency_id' => 2, // ID of the currency used for the payment
-            // 'company_currency_id' => 2,
-            // 'partner_type' => 'customer', // Type of the partner (e.g., 'customer' or 'supplier')
-            // 'invoice_line_ids' => [$inoviceId], // IDs of the invoices to reconcile with the payment
-            'state' => 'posted'
+       
+
+
+        // $newPaymentId = $models->execute_kw($db, $uid, $password, 'account.payment', 'write', [[$paymentId],$paymentData]);
+        // $response = ['status' => 'success', 'is_updated' => $newPaymentId,];
+        // echo json_encode($response);
+
+        $context = [
+            'active_model' => 'account.move',
+            'active_ids' => $invoiceId,
         ];
         
-        $newPaymentId = $models->execute_kw($db, $uid, $password, 'account.payment', 'write', [[$paymentId],$paymentData]);
-
-        $response = [
-            'status' => 'success',
-            'is_updated' => $newPaymentId,
+        // Create the payment register record
+        $paymentRegisterData = [
+            'partner_id' => $partnerId, // ID of the customer or partner
+            'payment_date' => $paymentDate, // Date of the payment (YYYY-MM-DD format)
+            'journal_id' => $journalId,
+            'payment_method_line_id' => $paymentMethodId,
+            'amount' => 1200.00, // Amount of the payment
         ];
-
+        $paymentRegisterId = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'create', [$paymentRegisterData], ['context' => $context]);
+        $response = ['status' => 'success', 'payment_created' => $paymentRegisterId,];
         echo json_encode($response);
+        
+        // Create the payments based on the payment register
+        if (is_int($paymentRegisterId)) {
+            $models->execute_kw($db, $uid, $password, 'account.payment.register', 'action_create_payments', [$paymentRegisterId]);
+        }
+        
+
+
+        // $payment = $models->execute_kw($db, $uid, $password, 'account.payment', 'search_read', [[['id', '=', $paymentId]], ['amount']]);
+        // echo json_encode($payment);
+
+        // if ($payment) {
+        //     $paymentAmount = $payment[0]['amount'];
+        //     $reconciliationData = [
+        //         [
+        //             'payment_id' => $newPaymentId,
+        //             'payment_amount' => $paymentAmount,
+        //             'invoice_id' => $invoiceId,
+        //         ],
+        //     ];
+
+        //     $recon = $models->execute_kw($db, $uid, $password, 'account.payment', 'process_reconciliations', [$reconciliationData]);
+        //     $response = ['status' => 'success', 'is_recon' => $recon,];
+        //     echo json_encode($response);
+        // }
+
+        // $invoiceUpdate = $models->execute_kw($db, $uid, $password, 'account.move', 'action_register_payment', [[$invoiceId], ['payment_id' => $paymentId]]);
+        // $response = ['status' => 'success', 'payment_registered' => $invoiceUpdate,];
+        // echo json_encode($response);
+
+        // $paymentData = [
+        //     'payment_date' => $paymentDate, // Date of the payment (YYYY-MM-DD format)
+        //     'journal_id' => $journalId, // ID of the journal for the payment
+        //     'amount' => 1200.00, // Amount of the payment
+        //     'payment_method_id' => $paymentMethodId, // ID of the payment method
+        //     'communication' => $invoiceNumber,
+        //     'active_ids' => [$invoiceId]
+        // ];
+
+        // $paymentRegisterId = $models->execute_kw($db, $uid, $password, 'account.move', 'action_register_payment', [[$paymentData]]);
+        // $response = ['status' => 'success', 'payment_registered' => $paymentRegisterId,];
+        // echo json_encode($response);
+
+        // $result = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'action_create_payments', [[$paymentRegisterId]]);
+        // $result = $models->execute_kw($db, $uid, $password, 'account.move', 'action_register_payment', [$invoiceId], ['payment_data' => $paymentData]);
+
+        // // $result = $models->execute_kw($db, $uid, $password, 'account.move', 'action_register_payment', [$paymentData]);
+        // $response = ['status' => 'success', 'is_updated' => $result,];
+        // echo json_encode($response);
 
        
     }
