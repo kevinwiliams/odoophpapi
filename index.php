@@ -397,6 +397,50 @@
        }
       
     }
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_REQUEST['e'] == 'product') {
+        //posted fields
+        $productName = $_POST['productName'];
+        $productCode = $_POST['productCode'];
+        $productType = $_POST['productType'];
+        $productCat = $_POST['productCat'];
+        $productPrice = $_POST['productPrice'];
+
+        include_once('include/connection/odoo_db.php');
+        require_once('include/ripcord/ripcord.php');
+
+        $common = ripcord::client("$url/xmlrpc/2/common");
+        $listing = $common->version();
+        // echo (json_encode($listing, JSON_PRETTY_PRINT));
+
+        //authenicate user
+        $uid = $common->authenticate($db, $username, $password, array());
+        if ($uid) {
+            echo 'Autheniticated';
+        } else {
+            echo 'Not authenticated';
+        }
+
+        //connect to odoo models
+        $models = ripcord::client("$url/xmlrpc/2/object");
+
+        $productData = [
+            'name' => $productName, // Name of the product
+            'type' => $productType, // Type of the product (e.g., 'product', 'service')
+            'list_price' => $productPrice, // Sales price of the product
+            'default_code' => $productCode, // Unique code or reference for the product
+            'categ_id' => $productCat, // Category of the product (optional) - default - All
+            // 'company_id' => 1, // Company associated with the product (optional); Admin user only can apply associated ID
+            'taxes_id' => [], // Tax applied to product
+            'supplier_taxes_id' => [] //Vender tax applied to product
+            
+        ];
+        
+        $newProductId = $models->execute_kw($db, $uid, $password, 'product.product', 'create', [$productData]);
+        
+        $response = [ 'status' => 'success', 'id_created' => $newProductId];
+        echo json_encode($response, JSON_PRETTY_PRINT);
+    }
    
     // Handle other endpoints similarly based on the HTTP method
 
