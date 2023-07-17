@@ -74,6 +74,141 @@
         echo json_encode($response, JSON_PRETTY_PRINT);
     }
 
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_REQUEST['e'] == 'inv') {
+        //posted fields
+       $invoiceNumber = $_POST['invoiceNumber'];
+       $partnerId = $_POST['partnerId'];
+       $invoiceDate = $_POST['invoiceDate'];
+       $invoiceDateDue = $_POST['invoiceDateDue'];
+       $accountId = $_POST['accountId'];
+       $journalId = $_POST['journalId'];
+        //connect to odoo
+       include('include/connection/odoo_db.php');
+       require_once('include/ripcord/ripcord.php');
+       $common = ripcord::client("$url/xmlrpc/2/common");
+       $uid = $common->authenticate($db, $username, $password, array());
+
+       if ($uid)
+           echo 'Autheniticated';
+       else
+           echo 'Not authenticated';
+       
+        //load odoo models
+       $models = ripcord::client("$url/xmlrpc/2/object");
+    
+       //create invoice with associated partner_id/customer
+       $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'create', [['move_type' => 'out_invoice', 'partner_id' => $partnerId]]); 
+       $response = [ 'status' => 'success', 'id_created' => $invoiceId ];
+        echo json_encode($response);
+
+        //if ID is created 
+        if (is_int($invoiceId)) {
+            //invoice data
+            $invoiceData = [
+                // 'name' => $invoiceNumber,
+                'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format) //default to today's date if not set
+                //   'invoice_date_due' =>  $invoiceDateDue,
+                //    'journal_id' => $journalId, //journal_id is added by default
+                'company_id' => 1, // Company associated with the invoice
+                'company_currency_id' => 2,
+                'currency_id' => 2, // Currency used in the invoice
+                'invoice_payment_term_id' => 4, //payment terms
+                'invoice_line_ids' => [
+                    [0, //command to create a new record
+                    false, //placeholder for ID since it's a new record
+                     [
+                        'product_id' => 33, // ID of the product
+                        //'name' => 'Product A', // Name of the product or service ::optional
+                        'quantity' => 1, // Quantity
+                        'price_unit' => 2350.00, // Unit price ::can be overwritten/optional
+                        'account_id' => $accountId, // ID of the account to be used for this line
+                        'tax_ids' => [1] // Tax ID to be applied to product
+                    ]],
+                    [0, false, [
+                        'product_id' => 35, // ID of the product
+                        // 'name' => 'Product B', // Name of the product or service ::optional
+                        'quantity' => 3,
+                        'price_unit' => 1500.00, // Unit price ::can be overwritten/optional
+                        'account_id' => $accountId, // ID of the account to be used for this line
+                        'tax_ids' => [1] // Tax ID to be applied to product
+                    ]]
+                ],
+            ];
+            //update created invoice with journal details
+            $newInvoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$invoiceId],$invoiceData]);
+    
+            $response = [ 'status' => 'success', 'is_updated' => $newInvoiceId ];
+            echo json_encode($response);
+            
+            //POST drafted invoice if information provided is valid
+            if ($newInvoiceId) {
+                $postedInvoice = $models->execute_kw($db, $uid, $password, 'account.move', 'action_post', [$invoiceId]);
+    
+                $response = [ 'status' => 'success', 'invoice' => $postedInvoice ];
+                echo json_encode($response);
+            }
+        }
+        
+       
+
+
+   }
+
+   if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_REQUEST['e'] == 'pay') {
+
+    include('include/connection/odoo_db.php');
+    require_once('include/ripcord/ripcord.php');
+    $common = ripcord::client("$url/xmlrpc/2/common");
+    $uid = $common->authenticate($db, $username, $password, array());
+    
+
+    if ($uid)
+        echo 'Autheniticated';
+    else
+        echo 'Not authenticated';
+    
+
+    $models = ripcord::client("$url/xmlrpc/2/object"); 
+    
+    //posted fields
+     $partnerId = $_POST['partnerId'];
+     $paymentDate = $_POST['paymentDate'];
+     $amount = $_POST['amount'];
+     $paymentMethodId = $_POST['paymentMethodId'];
+     $journalId = $_POST['journalId'];
+     $invoiceNumber = $_POST['invoiceNumber'];
+
+      // Fetch invoice ID based on invoice number (e.g., 'INV/2023/00055')
+      $invoiceNum = $invoiceNumber;
+      $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['payment_reference', '=', $invoiceNum]]]);
+      $invoiceId = $invoiceId[0] ?? false;
+      echo ('inoviceId '. $invoiceId );
+      // exit;
+     
+      $context = [
+          'active_model' => 'account.move',
+          'active_ids' => $invoiceId,
+      ];
+      
+      // Create the payment register record
+      $paymentRegisterData = [
+          'partner_id' => $partnerId, // ID of the customer or partner
+          'payment_date' => $paymentDate, // Date of the payment (YYYY-MM-DD format)
+          'journal_id' => $journalId,
+          'payment_method_line_id' => $paymentMethodId,
+          'amount' => $amount, // Amount of the payment
+      ];
+      $paymentRegisterId = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'create', [$paymentRegisterData], ['context' => $context]);
+      $response = ['status' => 'success', 'payment_created' => $paymentRegisterId,];
+      echo json_encode($response);
+      
+      // Create the payments based on the payment register
+      if (is_int($paymentRegisterId)) {
+          $models->execute_kw($db, $uid, $password, 'account.payment.register', 'action_create_payments', [$paymentRegisterId]);
+      }
+
+   }
+
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_REQUEST['e'] == 'payment') {
 
         include('include/connection/odoo_db.php');
@@ -304,9 +439,10 @@
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_REQUEST['e'] == 'bill') {
 
         //posted fields
-        $partnerId = $_POST['name'];
-        $invoiceDate = $_POST['email'];
-        $accountId = $_POST['phone'];
+        $partnerId = $_POST['partnerId'];
+        $invoiceDate = $_POST['invoiceDate'];
+        $accountId = $_POST['accountId'];
+        $invoiceNumber = $_POST['invoiceNumber'];
 
         include('include/connection/odoo_db.php');
         require_once('include/ripcord/ripcord.php');
@@ -322,189 +458,55 @@
 
        $models = ripcord::client("$url/xmlrpc/2/object");
 
-       /***** BILL ******/
-       $billData = [
-        'name' => 'BILL/2023/06/0021-1',
-        'partner_id' => $partnerId, // ID of the customer or partner
-        'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format)
-        'journal_id' => 2, // Date of the invoice (YYYY-MM-DD format)
-        'invoice_payment_term_id' => 7,
-        'invoice_line_ids' => [
-            [0, false, [
-                'product_id' => 5,
-                'name' => 'Product A', // Name of the product or service
-                'quantity' => 2, // Quantity
-                'price_unit' => 150, // Unit price
-                'credit' => 0, // Unit price
-                'debit' => 150, // Unit price
-                'account_id' => $accountId, // ID of the account to be used for this line
-            ]],
-            [0, false, [
-                'product_id' => 7,
-                'name' => 'Product B',
-                'quantity' => 1,
-                'price_unit' => 150,
-                'credit' => 0,
-                'debit' => 150,
-                'account_id' => $accountId,
-            ]],
-            [0, false, [
-                // 'product_id' => 7,
-                // 'name' => 'Product B',
-                // 'quantity' => 1,
-                // 'price_unit' => 150,
-                'credit' => 300,
-                'debit' => 0,
-                'account_id' => 14, //Accounts Payable
-            ]]
-        ],
-        'state' => 'draft',
-        'currency_id' => 2,
-        ];
-
-        $newBillId = $models->execute_kw($db, $uid, $password, 'account.move', 'create', [$billData]);
-        
-        $response = [
-            'status' => 'success',
-            'id_created' => $newBillId,
-        ];
-
-
-       echo json_encode($response, JSON_PRETTY_PRINT);
-
-    }
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_REQUEST['e'] == 'inv') {
-        //posted fields
-       $invoiceNumber = $_POST['invoiceNumber'];
-       $partnerId = $_POST['partnerId'];
-       $invoiceDate = $_POST['invoiceDate'];
-       $invoiceDateDue = $_POST['invoiceDateDue'];
-       $accountId = $_POST['accountId'];
-       $journalId = $_POST['journalId'];
-        //connect to odoo
-       include('include/connection/odoo_db.php');
-       require_once('include/ripcord/ripcord.php');
-       $common = ripcord::client("$url/xmlrpc/2/common");
-       $uid = $common->authenticate($db, $username, $password, array());
-
-       if ($uid)
-           echo 'Autheniticated';
-       else
-           echo 'Not authenticated';
-       
-        //load odoo models
-       $models = ripcord::client("$url/xmlrpc/2/object");
-    
-       //create invoice with associated partner_id/customer
-       $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'create', [['move_type' => 'out_invoice', 'partner_id' => $partnerId]]); 
-       $response = [ 'status' => 'success', 'id_created' => $invoiceId ];
+        //create invoice with associated partner_id/customer
+        $billId = $models->execute_kw($db, $uid, $password, 'account.move', 'create', [['move_type' => 'in_invoice', 'partner_id' => $partnerId]]); 
+        $response = [ 'status' => 'success', 'id_created' => $billId ];
         echo json_encode($response);
 
-        //if ID is created 
-        if (is_int($invoiceId)) {
-            //invoice data
-            $invoiceData = [
-                // 'name' => $invoiceNumber,
-                'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format) //default to today's date if not set
-                //   'invoice_date_due' =>  $invoiceDateDue,
-                //    'journal_id' => $journalId, //journal_id is added by default
-                'company_id' => 1, // Company associated with the invoice
-                'company_currency_id' => 2,
-                'currency_id' => 2, // Currency used in the invoice
-                'invoice_payment_term_id' => 4, //payment terms
-                'invoice_line_ids' => [
-                    [0, false, [
-                        'product_id' => 33, // ID of the product
-                        //'name' => 'Product A', // Name of the product or service ::optional
-                        'quantity' => 1, // Quantity
-                        'price_unit' => 2350.00, // Unit price ::can be overwritten/optional
-                        'account_id' => $accountId, // ID of the account to be used for this line
-                        'tax_ids' => [1] // Tax ID to be applied to product
-                    ]],
-                    [0, false, [
-                        'product_id' => 35, // ID of the product
-                        'name' => 'Product B', // Name of the product or service ::optional
-                        'quantity' => 3,
-                    //    'price_unit' => 1500.00, // Unit price ::can be overwritten/optional
-                        'account_id' => $accountId, // ID of the account to be used for this line
-                        'tax_ids' => [1] // Tax ID to be applied to product
-                    ]]
-                ],
+       /***** BILL ******/
+       if (is_int($billId)) {
+        $billData = [
+            // 'name' => 'BILL/2023/06/0022',
+            //'partner_id' => $partnerId, // ID of the customer or partner
+            'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format)
+            'invoice_payment_term_id' => 7,
+            'currency_id' => 2,
+            'ref' => $invoiceNumber,
+            'invoice_line_ids' => [
+                [0, false, [
+                    'product_id' => 5,
+                    'name' => 'Product A', // Name of the product or service
+                    'quantity' => 2, // Quantity
+                    'price_unit' => 150, // Unit price
+                    'account_id' => $accountId, // ID of the account to be used for this line
+                ]],
+                [0, false, [
+                    'product_id' => 7,
+                    'quantity' => 1,
+                    //'price_unit' => 150,
+                    'account_id' => $accountId,
+                ]]
+            ],
             ];
-            //update created invoice with journal details
-            $newInvoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$invoiceId],$invoiceData]);
     
-            $response = [ 'status' => 'success', 'is_updated' => $newInvoiceId ];
+            //update created bill with journal details
+            $newBillId = $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$billId],$billData]);
+    
+            $response = [ 'status' => 'success', 'is_updated' => $newBillId ];
             echo json_encode($response);
             
-            //POST drafted invoice if information provided is valid
-            if ($newInvoiceId) {
-                $postedInvoice = $models->execute_kw($db, $uid, $password, 'account.move', 'action_post', [$invoiceId]);
+            //POST drafted bill if information provided is valid
+            if ($newBillId) {
+                $postedBill = $models->execute_kw($db, $uid, $password, 'account.move', 'action_post', [$billId]);
     
-                $response = [ 'status' => 'success', 'invoice' => $postedInvoice ];
+                $response = [ 'status' => 'success', 'bill' => $postedBill ];
                 echo json_encode($response);
             }
-        }
-        
-       
-
-
-   }
-
-   if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_REQUEST['e'] == 'pay') {
-
-    include('include/connection/odoo_db.php');
-    require_once('include/ripcord/ripcord.php');
-    $common = ripcord::client("$url/xmlrpc/2/common");
-    $uid = $common->authenticate($db, $username, $password, array());
     
-
-    if ($uid)
-        echo 'Autheniticated';
-    else
-        echo 'Not authenticated';
-    
-
-    $models = ripcord::client("$url/xmlrpc/2/object"); 
-    
-    //posted fields
-     $partnerId = $_POST['partnerId'];
-     $paymentDate = $_POST['paymentDate'];
-     $amount = $_POST['amount'];
-     $paymentMethodId = $_POST['paymentMethodId'];
-     $journalId = $_POST['journalId'];
-     $invoiceNumber = $_POST['invoiceNumber'];
-
-      // Fetch invoice ID based on invoice number (e.g., 'USD')
-      $invoiceNum = $invoiceNumber;
-      $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['payment_reference', '=', $invoiceNum]]]);
-      $invoiceId = $invoiceId[0] ?? false;
-      echo ('inoviceId '. $invoiceId );
-      // exit;
-     
-      $context = [
-          'active_model' => 'account.move',
-          'active_ids' => $invoiceId,
-      ];
+       }
       
-      // Create the payment register record
-      $paymentRegisterData = [
-          'partner_id' => $partnerId, // ID of the customer or partner
-          'payment_date' => $paymentDate, // Date of the payment (YYYY-MM-DD format)
-          'journal_id' => $journalId,
-          'payment_method_line_id' => $paymentMethodId,
-          'amount' => $amount, // Amount of the payment
-      ];
-      $paymentRegisterId = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'create', [$paymentRegisterData], ['context' => $context]);
-      $response = ['status' => 'success', 'payment_created' => $paymentRegisterId,];
-      echo json_encode($response);
-      
-      // Create the payments based on the payment register
-      if (is_int($paymentRegisterId)) {
-          $models->execute_kw($db, $uid, $password, 'account.payment.register', 'action_create_payments', [$paymentRegisterId]);
-      }
-
-   }
+    }
+   
     // Handle other endpoints similarly based on the HTTP method
 
     // Return a 404 response for unsupported endpoints
