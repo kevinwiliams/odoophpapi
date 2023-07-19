@@ -12,7 +12,7 @@
         }
     
         // Query to fetch data from the database
-        $query = "SELECT * FROM users";
+        $query = "SELECT * FROM users WHERE is_active = 1";
         $result = mysqli_query($connection, $query);
     
         // Check if the query execution was successful
@@ -33,12 +33,79 @@
     
         exit;
     }
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_REQUEST['e'] == 'load') {
+        
+
+        include_once('include/connection/odoo_db.php');
+        require_once('include/ripcord/ripcord.php');
+
+        $common = ripcord::client("$url/xmlrpc/2/common");
+        $listing = $common->version();
+        // echo (json_encode($listing, JSON_PRETTY_PRINT));
+
+        //authenicate user
+        $uid = $common->authenticate($db, $username, $password, array());
+        if ($uid) {
+            echo 'Autheniticated';
+        } else {
+            echo 'Not authenticated';
+        }
+
+        //connect to odoo models
+        $models = ripcord::client("$url/xmlrpc/2/object");
+
+        
+        $arrContextOptions = array(
+            "ssl" => array(
+            "verify_peer" => false,
+            "verify_peer_name" => false,
+            )
+        );
+        $context = stream_context_create($arrContextOptions);
+
+        $response = file_get_contents('https://odoophpapi.test', false, $context);
+
+        // Process the API response
+        if ($response) {
+            // Decode the JSON response into an associative array
+            $data = json_decode($response, true);
+
+            // Process the data as needed
+            foreach ($data as $item) {
+                $itemData = 
+                [
+                    'name' => $item['first_name'].' '. $item['last_name'],
+                    'phone'  => $item['contact_number'], //area code required
+                    'email'  => $item['email'],
+                    // 'function' => 'Developer'
+                ];
+
+                $new_id = $models->execute_kw($db, $uid, $password, 'res.partner', 'create', [$itemData]); 
+                
+                
+            }
+            $response = [ 'status' => 'success', 'idCreated' => $new_id];
+            echo json_encode($response, JSON_PRETTY_PRINT);
+
+        } else {
+            $response = [ 'status' => 'failed'];
+            echo json_encode($response, JSON_PRETTY_PRINT);
+            //echo 'API request failed.';
+            // Handle the failure as needed
+        }
+    }
     
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_REQUEST['e'] == 'contact') {
         //posted fields
-        $name = $_POST['name'];
-        $email = $_POST['email'];
-        $phone = $_POST['phone'];
+        $postData = file_get_contents('php://input');
+        $contactData = json_decode($postData, true);
+
+        // Extract invoice fields from the JSON data
+        $name = $contactData['name'];
+        $email = $contactData['email'];
+        $phone = $contactData['phone'];
+        $company = $contactData['company_id'];
 
         include_once('include/connection/odoo_db.php');
         require_once('include/ripcord/ripcord.php');
@@ -74,14 +141,115 @@
         echo json_encode($response, JSON_PRETTY_PRINT);
     }
 
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_REQUEST['e'] == 'company') {
+         //posted fields
+         $postData = file_get_contents('php://input');
+         $companyData = json_decode($postData, true);
+
+        //posted fields
+        $companyName = $companyData['name'];
+        $companyEmail = $companyData['email'];
+        $companyPhone = $companyData['phone'];
+        $currency = $companyData['currency'];
+        $country = $companyData['country'];
+        $fiscalLastDay = $companyData['fiscal_last_day'] ?? 31;
+
+
+        include_once('include/connection/odoo_db.php');
+        require_once('include/ripcord/ripcord.php');
+
+        $common = ripcord::client("$url/xmlrpc/2/common");
+        $listing = $common->version();
+        // echo (json_encode($listing, JSON_PRETTY_PRINT));
+
+        //authenicate user
+        $uid = $common->authenticate($db, $username, $password, array());
+        if ($uid) {
+            echo 'Autheniticated';
+        } else {
+            echo 'Not authenticated';
+        }
+
+        //connect to odoo models
+        $models = ripcord::client("$url/xmlrpc/2/object");
+
+        // Fetch currency id based on name (e.g., 'USD')
+        $currenyId = $models->execute_kw($db, $uid, $password, 'res.currency', 'search', [[['name', '=', $currency]]]);
+        $currenyId = $currenyId[0] ?? false;
+
+        $countryId = $models->execute_kw($db, $uid, $password, 'res.country', 'search', [[['code', '=', $country]]]);
+        $countryId = $countryId[0] ?? false;
+      
+        $companyData = [
+            'name' => $companyName, // Name of the company
+            'email' => $companyEmail,
+            'phone' => $companyPhone,
+            'currency_id' => intval($currenyId), // ID of the currency used in the company
+            'account_fiscal_country_id' => $countryId, // ID of the country where the company is located
+            //'chart_template_id' => 1, // Link the company to an account chart template (fiscal localization)
+            // // Other company data...
+            //journal
+        ];
+        
+        $newCompanyId = $models->execute_kw($db, $uid, $password, 'res.company', 'create', [$companyData]);
+        $response = [ 'status' => 'success', 'id_created' => $newCompanyId];
+        echo json_encode($response, JSON_PRETTY_PRINT);
+
+        if (is_int($newCompanyId)) {
+       
+            $chartTemplateId = 1;
+            // Configure fiscal period
+            $settingsData = [
+                'company_id' => $newCompanyId,
+                // 'chart_template_id' => 1, // Link the company to an account chart template (fiscal localization)
+                'fiscalyear_last_day' => $fiscalLastDay, // Last day of the fiscal year
+                //'fiscalyear_last_month' => 12, // Last month of the fiscal year
+                'fiscalyear_lock_date' => '2023-01-01', // Lock date for fiscal year
+                // Other fiscal period configuration...
+            ];
+            $configSettingsId = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'create', [$settingsData]);
+            $response = [ 'status' => 'success', 'id_created' => $configSettingsId];
+            echo json_encode($response, JSON_PRETTY_PRINT);
+
+            // Update the 'res.config.settings' record to apply fiscal localization
+            $updateSettings = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'write', [
+                [$configSettingsId],
+                [
+                    'chart_template_id' => 1, // Replace with the ID of the desired chart template
+                ],
+            ]);
+            $response = [ 'status' => 'success', 'settings_updated' => $updateSettings];
+            echo json_encode($response, JSON_PRETTY_PRINT);
+
+            // Apply fiscal localization and load chart of accounts
+            $localizationApplied = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'execute', [$configSettingsId]);
+            $response = ['status' => 'success', 'localization_applied' => $localizationApplied];
+            echo json_encode($response, JSON_PRETTY_PRINT);
+            // Update the company's chart template
+            $applyChartTemp = $models->execute_kw($db, $uid, $password, 'res.company', 'write', [[$newCompanyId], ['chart_template_id' => $chartTemplateId]]);
+            $response = ['status' => 'success', 'chart_template_applied' => $applyChartTemp];
+            echo json_encode($response, JSON_PRETTY_PRINT);
+
+            // $updatedSettings = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'execute', [$configSettingsId]);
+            // $response = [ 'status' => 'success', 'is_exe' => $updatedSettings];
+            // echo json_encode($response, JSON_PRETTY_PRINT);
+        }
+    }
+
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_REQUEST['e'] == 'inv') {
         //posted fields
-       $invoiceNumber = $_POST['invoiceNumber'];
-       $partnerId = $_POST['partnerId'];
-       $invoiceDate = $_POST['invoiceDate'];
-       $invoiceDateDue = $_POST['invoiceDateDue'];
-       $accountId = $_POST['accountId'];
-       $journalId = $_POST['journalId'];
+        $postData = file_get_contents('php://input');
+        $invoiceInfo = json_decode($postData, true);
+
+        //posted fields
+       $invoiceNumber = $invoiceInfo['name'] ?? false;
+       $partnerId = $invoiceInfo['customer_id'];
+       $invoiceDate = $invoiceInfo['invoice_date'];
+       $invoiceDateDue = $invoiceInfo['invoice_date_due'];
+       $currency = $invoiceInfo['currency'];
+       $paymentTerm = $invoiceInfo['payment_term'];
+       $accountId = $invoiceInfo['account_id'] ?? 21;
+       $invoiceLines = $invoiceInfo['invoice_lines'];
         //connect to odoo
        include('include/connection/odoo_db.php');
        require_once('include/ripcord/ripcord.php');
@@ -103,36 +271,32 @@
 
         //if ID is created 
         if (is_int($invoiceId)) {
+
+            // Fetch currency id based on name (e.g., 'USD')
+            $currencyId = $models->execute_kw($db, $uid, $password, 'res.currency', 'search', [[['name', '=', $currency]]]);
+            $currencyId = $currencyId[0] ?? false;
             //invoice data
+            $invoiceLineIds = [];
+            foreach ($invoiceLines as $line) {
+                $invoiceLineIds[] = [0, false, [
+                    'product_id' => $line['product_id'],
+                    'name' => $line['name'] ?? false,
+                    'quantity' => $line['quantity'],
+                    'price_unit' => $line['price'] ?? false,
+                    'account_id' => $accountId,
+                    'tax_ids' => $line['tax_ids'] ?? []
+                ]];
+            }
+
             $invoiceData = [
-                // 'name' => $invoiceNumber,
+                'name' => $invoiceNumber,
                 'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format) //default to today's date if not set
                 //   'invoice_date_due' =>  $invoiceDateDue,
-                //    'journal_id' => $journalId, //journal_id is added by default
                 'company_id' => 1, // Company associated with the invoice
-                'company_currency_id' => 2,
-                'currency_id' => 2, // Currency used in the invoice
-                'invoice_payment_term_id' => 4, //payment terms
-                'invoice_line_ids' => [
-                    [0, //command to create a new record
-                    false, //placeholder for ID since it's a new record
-                     [
-                        'product_id' => 33, // ID of the product
-                        //'name' => 'Product A', // Name of the product or service ::optional
-                        'quantity' => 1, // Quantity
-                        'price_unit' => 2350.00, // Unit price ::can be overwritten/optional
-                        'account_id' => $accountId, // ID of the account to be used for this line
-                        'tax_ids' => [1] // Tax ID to be applied to product
-                    ]],
-                    [0, false, [
-                        'product_id' => 35, // ID of the product
-                        // 'name' => 'Product B', // Name of the product or service ::optional
-                        'quantity' => 3,
-                        'price_unit' => 1500.00, // Unit price ::can be overwritten/optional
-                        'account_id' => $accountId, // ID of the account to be used for this line
-                        'tax_ids' => [1] // Tax ID to be applied to product
-                    ]]
-                ],
+                'company_currency_id' => $currencyId,
+                'currency_id' => $currencyId, // Currency used in the invoice
+                'invoice_payment_term_id' => $paymentTerm, //payment terms
+                'invoice_line_ids' => $invoiceLineIds
             ];
             //update created invoice with journal details
             $newInvoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$invoiceId],$invoiceData]);
@@ -169,14 +333,17 @@
     
 
     $models = ripcord::client("$url/xmlrpc/2/object"); 
-    
     //posted fields
-     $partnerId = $_POST['partnerId'];
-     $paymentDate = $_POST['paymentDate'];
-     $amount = $_POST['amount'];
-     $paymentMethodId = $_POST['paymentMethodId'];
-     $journalId = $_POST['journalId'];
-     $invoiceNumber = $_POST['invoiceNumber'];
+    $postData = file_get_contents('php://input');
+    $paymentInfo = json_decode($postData, true);
+
+    //posted fields
+     $partnerId = $paymentInfo['customer_id'];
+     $paymentDate = $paymentInfo['payment_date'];
+     $amount = $paymentInfo['amount'];
+     $paymentMethodId = $paymentInfo['payment_method'];
+     $journalId = $paymentInfo['journalId'] ?? 8;
+     $invoiceNumber = $paymentInfo['invoice_num'];
 
       // Fetch invoice ID based on invoice number (e.g., 'INV/2023/00055')
       $invoiceNum = $invoiceNumber;
@@ -328,12 +495,18 @@
     }
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_REQUEST['e'] == 'bill') {
+        //posted fields
+        $postData = file_get_contents('php://input');
+        $billInfo = json_decode($postData, true);
 
         //posted fields
-        $partnerId = $_POST['partnerId'];
-        $invoiceDate = $_POST['invoiceDate'];
-        $accountId = $_POST['accountId'];
-        $invoiceNumber = $_POST['invoiceNumber'];
+        $partnerId = $billInfo['customer_id'];
+        $invoiceDate = $billInfo['bill_date'];
+        $accountId = $billInfo['accountId'] ?? 26;
+        $invoiceNumber = $billInfo['reference'];
+        $paymentTerm = $billInfo['payment_term'];
+        $currency = $billInfo['currency'];
+        $invoiceLines = $billInfo['invoice_lines'];
 
         include('include/connection/odoo_db.php');
         require_once('include/ripcord/ripcord.php');
@@ -356,28 +529,31 @@
 
        /***** BILL ******/
        if (is_int($billId)) {
+
+        // Fetch currency id based on name (e.g., 'USD')
+        $currencyId = $models->execute_kw($db, $uid, $password, 'res.currency', 'search', [[['name', '=', $currency]]]);
+        $currencyId = $currencyId[0] ?? false;
+        
+        //invoice lines
+        $invoiceLineIds = [];
+        foreach ($invoiceLines as $line) {
+            $invoiceLineIds[] = [0, false, [
+                'product_id' => $line['product_id'],
+                'name' => $line['name'] ?? false,
+                'quantity' => $line['quantity'],
+                'price_unit' => $line['price'] ?? false,
+                'account_id' => $accountId,
+            ]];
+        }
+
         $billData = [
             // 'name' => 'BILL/2023/06/0022',
             //'partner_id' => $partnerId, // ID of the customer or partner
             'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format)
-            'invoice_payment_term_id' => 7,
-            'currency_id' => 2,
+            'invoice_payment_term_id' => $paymentTerm,
+            'currency_id' => $currencyId,
             'ref' => $invoiceNumber,
-            'invoice_line_ids' => [
-                [0, false, [
-                    'product_id' => 5,
-                    'name' => 'Product A', // Name of the product or service
-                    'quantity' => 2, // Quantity
-                    'price_unit' => 150, // Unit price
-                    'account_id' => $accountId, // ID of the account to be used for this line
-                ]],
-                [0, false, [
-                    'product_id' => 7,
-                    'quantity' => 1,
-                    //'price_unit' => 150,
-                    'account_id' => $accountId,
-                ]]
-            ],
+            'invoice_line_ids' => $invoiceLineIds,
             ];
     
             //update created bill with journal details
@@ -399,12 +575,19 @@
     }
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_REQUEST['e'] == 'product') {
-        //posted fields
-        $productName = $_POST['productName'];
-        $productCode = $_POST['productCode'];
-        $productType = $_POST['productType'];
-        $productCat = $_POST['productCat'];
-        $productPrice = $_POST['productPrice'];
+         //posted fields
+         $postData = file_get_contents('php://input');
+         $productData = json_decode($postData, true);
+
+        $productName = $productData['name'];
+        $productCode = $productData['code'];
+        $productType = $productData['type'];
+        $productCat = $productData['category'];
+        $productPrice = $productData['price'];
+        $productSalesTax = $productData['sales_tax'];
+        $productVendorTax = $productData['vendor_tax'];
+
+
 
         include_once('include/connection/odoo_db.php');
         require_once('include/ripcord/ripcord.php');
