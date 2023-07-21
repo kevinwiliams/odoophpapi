@@ -12,7 +12,19 @@
         }
     
         // Query to fetch data from the database
-        $query = "SELECT * FROM users WHERE is_active = 1";
+        $query = "select concat(u.first_name, ' ', u.last_name) name, u.email, u.contact_number phone, rt.key title, ur.is_active, ur.strata_id company_id, s.strata_name, s.email_address, a.* 
+        from user_roles ur
+        join users u on u.id = ur.user_id
+        join role_types rt on rt.id = ur.role_type_id
+        join stratas s on s.id = ur.strata_id
+        join addresses a on a.id = s.address_id
+        where ur.is_active = 1";
+
+        $queryCompanies = "select s.id, s.strata_name, s.email_address, a.* from stratas s
+        join addresses a on a.id = s.address_id";
+
+        $queryProducts = "select name, 'code', 'service', unit_cost_in_cents, strata_id from items";
+
         $result = mysqli_query($connection, $query);
     
         // Check if the query execution was successful
@@ -598,6 +610,7 @@
         $productPrice = $productData['price'];
         $productSalesTax = $productData['sales_tax'];
         $productVendorTax = $productData['vendor_tax'];
+        $companyId = $productData['company_id'];
 
 
 
@@ -622,10 +635,10 @@
         $productData = [
             'name' => $productName, // Name of the product
             'type' => $productType, // Type of the product (e.g., 'product', 'service')
-            'list_price' => $productPrice, // Sales price of the product
+            'list_price' => $productPrice / 100, // Sales price of the product
             'default_code' => $productCode, // Unique code or reference for the product
             'categ_id' => $productCat, // Category of the product (optional) - default - All
-            // 'company_id' => 1, // Company associated with the product (optional); Admin user only can apply associated ID
+            'company_id' => $companyId, // Company associated with the product (optional); Admin user only can apply associated ID
             'taxes_id' => [], // Tax applied to product
             'supplier_taxes_id' => [] //Vender tax applied to product
             
