@@ -186,7 +186,7 @@
             'phone' => $companyPhone,
             'currency_id' => intval($currenyId), // ID of the currency used in the company
             'account_fiscal_country_id' => $countryId, // ID of the country where the company is located
-            //'chart_template_id' => 1, // Link the company to an account chart template (fiscal localization)
+            // 'chart_template_id' => 1, // Link the company to an account chart template (fiscal localization)
             // // Other company data...
             //journal
         ];
@@ -196,6 +196,15 @@
         echo json_encode($response, JSON_PRETTY_PRINT);
 
         if (is_int($newCompanyId)) {
+            // Get the current year
+            $currentYear = date('Y');
+
+            // Set the month and day to get the first day of January
+            $firstMonth = '01';
+            $firstDay = '01';
+
+            // Create the date string in the format "YYYY-MM-DD"
+            $lockDate = $currentYear . '-' . $firstMonth . '-' . $firstDay;
        
             $chartTemplateId = 1;
             // Configure fiscal period
@@ -203,8 +212,8 @@
                 'company_id' => $newCompanyId,
                 // 'chart_template_id' => 1, // Link the company to an account chart template (fiscal localization)
                 'fiscalyear_last_day' => $fiscalLastDay, // Last day of the fiscal year
-                //'fiscalyear_last_month' => 12, // Last month of the fiscal year
-                'fiscalyear_lock_date' => '2023-01-01', // Lock date for fiscal year
+                'fiscalyear_last_month' => "12", // Last month of the fiscal year
+                'fiscalyear_lock_date' => $lockDate, // Lock date for fiscal year
                 // Other fiscal period configuration...
             ];
             $configSettingsId = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'create', [$settingsData]);
@@ -215,21 +224,24 @@
             $updateSettings = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'write', [
                 [$configSettingsId],
                 [
-                    'chart_template_id' => 1, // Replace with the ID of the desired chart template
+                    'chart_template_id' => $chartTemplateId, // Replace with the ID of the desired chart template
                 ],
             ]);
             $response = [ 'status' => 'success', 'settings_updated' => $updateSettings];
             echo json_encode($response, JSON_PRETTY_PRINT);
 
+            // Update the company's chart template
+            // echo ' compID: '.$newCompanyId;
+            // echo ' chartID: '.$chartTemplateId;
+            // $applyChartTemp = $models->execute_kw($db, $uid, $password, 'res.company', 'write', [[$newCompanyId], ['chart_template_id' => $chartTemplateId]]);
+            // $response = ['status' => 'success', 'chart_template_applied' => $applyChartTemp];
+            // echo json_encode($response, JSON_PRETTY_PRINT);
+
             // Apply fiscal localization and load chart of accounts
             $localizationApplied = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'execute', [$configSettingsId]);
             $response = ['status' => 'success', 'localization_applied' => $localizationApplied];
             echo json_encode($response, JSON_PRETTY_PRINT);
-            // Update the company's chart template
-            $applyChartTemp = $models->execute_kw($db, $uid, $password, 'res.company', 'write', [[$newCompanyId], ['chart_template_id' => $chartTemplateId]]);
-            $response = ['status' => 'success', 'chart_template_applied' => $applyChartTemp];
-            echo json_encode($response, JSON_PRETTY_PRINT);
-
+            
             // $updatedSettings = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'execute', [$configSettingsId]);
             // $response = [ 'status' => 'success', 'is_exe' => $updatedSettings];
             // echo json_encode($response, JSON_PRETTY_PRINT);
