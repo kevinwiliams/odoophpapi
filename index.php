@@ -15,7 +15,7 @@
         }
     
         // Query to fetch data from the database
-        $queryContacts = "select concat(u.first_name, ' ', u.last_name) name, u.email, u.contact_number phone, rt.key title, ur.is_active, ur.strata_id company_id, s.strata_name, s.email_address, a.* 
+        $queryContacts = "select u.uuid, concat(u.first_name, ' ', u.last_name) name, u.email, u.contact_number phone, rt.key title, ur.is_active, s.uuid company_uuid, ur.strata_id company_id, s.strata_name, s.email_address, a.* 
         from user_roles ur
         join users u on u.id = ur.user_id
         join role_types rt on rt.id = ur.role_type_id
@@ -24,11 +24,11 @@
         where ur.is_active = 1";
 
         $queryCompanies = "select s.uuid, s.id, s.strata_name, s.email_address, s.contact_number, 'JM' country, 'JMD' currency, a.* from stratas s
-        join addresses a on a.id = s.address_id where s.id";
+        join addresses a on a.id = s.address_id";
 
         $queryProducts = "select name, 'code', 'service' type, unit_cost_in_cents, strata_id from items";
 
-        $result = mysqli_query($connection, $queryCompanies);
+        $result = mysqli_query($connection, $queryContacts);
     
         // Check if the query execution was successful
         if (!$result) {
@@ -52,133 +52,7 @@
         mysqli_close($connection);
 
         exit;
-        include_once('include/connection/odoo_db.php');
-        require_once('include/ripcord/ripcord.php');
-
-        $common = ripcord::client("$url/xmlrpc/2/common");
-        $listing = $common->version();
-        // echo (json_encode($listing, JSON_PRETTY_PRINT));
-
-        //authenicate user
-        $uid = $common->authenticate($db, $username, $password, array());
-        if ($uid) {
-            echo 'Autheniticated';
-        } else {
-            echo 'Not authenticated';
-        }
-
-        //connect to odoo models
-        $models = ripcord::client("$url/xmlrpc/2/object");
-        
-        // $flds = $models->execute_kw($db, $uid, $password, 'res.company', 'read', [1]);
-        // echo json_encode($flds, JSON_PRETTY_PRINT);
-
-        foreach ($flds as $item) {
-            // echo $item['name'];
- 
-             $companyName = $item['strata_name'];
-                 $companyEmail = $item['email_address'];
-                 $companyPhone = $item['contact_number'];
-                 $currency = $item['currency'];
-                 $country = $item['country'];
-                 $uuid = $item['uuid'];
-                 $fiscalLastDay = $item['fiscal_last_day'] ?? 31;
- 
-             // Fetch currency id based on name (e.g., 'USD')
-                 $currenyId = $models->execute_kw($db, $uid, $password, 'res.currency', 'search', [[['name', '=', $currency]]]);
-                 $currenyId = $currenyId[0] ?? false;
- 
-                 $countryId = $models->execute_kw($db, $uid, $password, 'res.country', 'search', [[['code', '=', $country]]]);
-                 $countryId = $countryId[0] ?? false;
- 
-                 // First, create the partner with the mailing address details
-                 $partnerData = [
-                     'name' => $companyName,
-                     'email' => $companyEmail,
-                     'phone' => $companyPhone,
-                     // Other partner data...
-                     'street' => $item['address_line_1'],
-                     'city' => $item['city'],
-                     'x_uuid' => $uuid,
-                     'country_id' => $countryId, // ID of the country for the mailing address
-                     'is_company' => true
-                 ];
- 
-                 $newPartnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'create', [$partnerData]);
- 
-                 // Next, create the company and link it to the partner with the mailing address
- 
-             
-                 $companyData = [
-                     'x_uuid' => $uuid, // Name of the company
-                     'name' => $companyName, // Name of the company
-                     'email' => $companyEmail,
-                     'phone' => $companyPhone,
-                     'currency_id' => intval($currenyId), // ID of the currency used in the company
-                     'account_fiscal_country_id' => $countryId, // ID of the country where the company is located
-                     // 'chart_template_id' => 1, // Link the company to an account chart template (fiscal localization)
-                     // // Other company data...
-                     //journal
-                 ];
-                 
-                 $newCompanyId = $models->execute_kw($db, $uid, $password, 'res.company', 'create', [$companyData]);
-                 $response = [ 'status' => 'success', 'id_created' => $newCompanyId];
-                 echo json_encode($response, JSON_PRETTY_PRINT);
- 
-                 if (is_int($newCompanyId)) {
-                     // Get the current year
-                     $currentYear = date('Y');
- 
-                     // Set the month and day to get the first day of January
-                     $firstMonth = '01';
-                     $firstDay = '01';
- 
-                     // Create the date string in the format "YYYY-MM-DD"
-                     $lockDate = $currentYear . '-' . $firstMonth . '-' . $firstDay;
-             
-                     $chartTemplateId = 1;
-                     // Configure fiscal period
-                     $settingsData = [
-                         'company_id' => $newCompanyId,
-                         // 'chart_template_id' => 1, // Link the company to an account chart template (fiscal localization)
-                         'fiscalyear_last_day' => $fiscalLastDay, // Last day of the fiscal year
-                         'fiscalyear_last_month' => "12", // Last month of the fiscal year
-                         'fiscalyear_lock_date' => $lockDate, // Lock date for fiscal year
-                         // Other fiscal period configuration...
-                     ];
-                     $configSettingsId = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'create', [$settingsData]);
-                     $response = [ 'status' => 'success', 'id_created' => $configSettingsId];
-                     echo json_encode($response, JSON_PRETTY_PRINT);
- 
-                     // Update the 'res.config.settings' record to apply fiscal localization
-                     $updateSettings = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'write', [
-                         [$configSettingsId],
-                         [
-                             'chart_template_id' => $chartTemplateId, // Replace with the ID of the desired chart template
-                         ],
-                     ]);
-                     $response = [ 'status' => 'success', 'settings_updated' => $updateSettings];
-                     echo json_encode($response, JSON_PRETTY_PRINT);
- 
-                     // Update the company's chart template
-                     // echo ' compID: '.$newCompanyId;
-                     // echo ' chartID: '.$chartTemplateId;
-                     // $applyChartTemp = $models->execute_kw($db, $uid, $password, 'res.company', 'write', [[$newCompanyId], ['chart_template_id' => $chartTemplateId]]);
-                     // $response = ['status' => 'success', 'chart_template_applied' => $applyChartTemp];
-                     // echo json_encode($response, JSON_PRETTY_PRINT);
- 
-                     // Apply fiscal localization and load chart of accounts
-                     $localizationApplied = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'execute', [$configSettingsId]);
-                     $response = ['status' => 'success', 'localization_applied' => $localizationApplied];
-                     echo json_encode($response, JSON_PRETTY_PRINT);
-                     
-                     // $updatedSettings = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'execute', [$configSettingsId]);
-                     // $response = [ 'status' => 'success', 'is_exe' => $updatedSettings];
-                     // echo json_encode($response, JSON_PRETTY_PRINT);
-                 }
-         }
-    
-        exit;
+       
     }
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_REQUEST['e'] == 'load') {
@@ -208,9 +82,9 @@
             )
         );
         $context = stream_context_create($arrContextOptions);
-        $response = file_get_contents('https://odoophpapi.test', false, $context);
+        $response = file_get_contents('https://odoophpapi.test/', false, $context);
 
-        echo $response;
+        //echo $response;
 
         // Process the API response
         if ($response === null && json_last_error() !== JSON_ERROR_NONE) {
@@ -219,12 +93,55 @@
             echo "inside";
             // Decode the JSON response into an associative array
             $data = json_decode($response, true);
-            echo $data;
-            //print_r($data);
-            exit;
+            //echo ($response);
+
+            // $responseArray = json_decode($data, true);
+
+            // Loop through each element
+            // foreach ($data as $element) {
+            //     $uuid = $element['uuid'];
+            //     $id = $element['id'];
+            //     $strataName = $element['strata_name'];
+            //     $emailAddress = $element['email_address'];
+            //     // ... and so on for other fields
+                
+            //     // Output or process each element as needed
+            //     echo "UUID: $uuid, ID: $id, Strata Name: $strataName, Email Address: $emailAddress\n";
+            // }
+            // //print_r($data);
+            // exit;
             
             // Process the data as needed
            foreach ($data as $item) {
+                
+            // $uuid = $item['uuid'];
+            // $name = $item['name'];
+            // $title = $item['title'];
+            // $email = $item['email'];
+            // $phone = $item['phone'];
+            // $company = $item['company_uuid'];
+
+            // // Fetch company id based on VM UUID
+            // $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $company]]]);
+            // $companyId = $companyId[0] ?? false;
+
+            // $itemData = 
+            //         [[
+            //             'x_uuid' => $uuid,
+            //             'name' => $name,
+            //             'title' => $title,
+            //             'phone'  => $phone, //area code required
+            //             'email'  => $email,
+            //             'company_id' => $companyId,
+            //             // 'commercial_partner_id' => 52,
+            //             // 'company_name' => 'My Company (San Francisco)',
+            //             'is_company' => false
+            //         ]];
+
+            // $new_id = $models->execute_kw($db, $uid, $password, 'res.partner', 'create', $itemData); 
+            // $response = [ 'status' => 'success', 'id_created' => $new_id];
+            // echo json_encode($response, JSON_PRETTY_PRINT);
+
                 // $itemData = 
                 //     [
                 //         'name' => $item['first_name'].' '. $item['last_name'],
@@ -239,35 +156,106 @@
                   //posted fields
                 $companyName = $item['strata_name'];
                 $companyEmail = $item['email_address'];
-                $companyPhone = $item['email_address'];
+                $companyPhone = $item['contact_number'];
+                $companyAddress = $item['address_line_1'];
                 $currency = $item['currency'];
                 $country = $item['country'];
-                $uuid = $item['id'];
+                $uuid = $item['uuid'];
                 $fiscalLastDay = $item['fiscal_last_day'] ?? 31;
 
 
-                // Fetch currency id based on name (e.g., 'USD')
+                // // Fetch currency id based on name (e.g., 'USD')
                 $currenyId = $models->execute_kw($db, $uid, $password, 'res.currency', 'search', [[['name', '=', $currency]]]);
                 $currenyId = $currenyId[0] ?? false;
 
                 $countryId = $models->execute_kw($db, $uid, $password, 'res.country', 'search', [[['code', '=', $country]]]);
                 $countryId = $countryId[0] ?? false;
 
+                // // First, create the partner with the mailing address details
+                // $partnerData = [
+                //     'x_uuid' => $uuid,
+                //     'name' => $companyName,
+                //     'email' => $companyEmail,
+                //     'phone' => $companyPhone,
+                //     // Other partner data...
+                //     'street' => $companyAddress,
+                //     'city' => 'city',
+                //     'country_id' => $countryId, // ID of the country for the mailing address
+                //     'is_company' => true
+                // ];
+
+                // $newPartnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'create', [$partnerData]);
+
+                // // Next, create the company and link it to the partner with the mailing address
+
+            
                 $companyData = [
-                    'name' => $companyName, // Name of the company
+                    'x_uuid' => $uuid, // Name of the company
+                    'name' => $companyName.'-VM', // Name of the company
                     'email' => $companyEmail,
                     'phone' => $companyPhone,
                     'currency_id' => intval($currenyId), // ID of the currency used in the company
                     'account_fiscal_country_id' => $countryId, // ID of the country where the company is located
-                    'x_uuid' => $uuid
                     // 'chart_template_id' => 1, // Link the company to an account chart template (fiscal localization)
                     // // Other company data...
                     //journal
                 ];
                 
-                // $newCompanyId = $models->execute_kw($db, $uid, $password, 'res.company', 'create', [$companyData]);
-                // $response = [ 'status' => 'success', 'idCreated' => $newCompanyId];
-                // echo json_encode($response, JSON_PRETTY_PRINT);
+                $newCompanyId = $models->execute_kw($db, $uid, $password, 'res.company', 'create', [$companyData]);
+                $response = [ 'status' => 'success', 'id_created' => $newCompanyId];
+                echo json_encode($response, JSON_PRETTY_PRINT);
+
+                if (is_int($newCompanyId)) {
+                    // Get the current year
+                    $currentYear = date('Y');
+
+                    // Set the month and day to get the first day of January
+                    $firstMonth = '01';
+                    $firstDay = '01';
+
+                    // Create the date string in the format "YYYY-MM-DD"
+                    $lockDate = $currentYear . '-' . $firstMonth . '-' . $firstDay;
+            
+                    $chartTemplateId = 1;
+                    // Configure fiscal period
+                    $settingsData = [
+                        'company_id' => $newCompanyId,
+                        // 'chart_template_id' => 1, // Link the company to an account chart template (fiscal localization)
+                        'fiscalyear_last_day' => $fiscalLastDay, // Last day of the fiscal year
+                        'fiscalyear_last_month' => "12", // Last month of the fiscal year
+                        'fiscalyear_lock_date' => $lockDate, // Lock date for fiscal year
+                        // Other fiscal period configuration...
+                    ];
+                    $configSettingsId = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'create', [$settingsData]);
+                    $response = [ 'status' => 'success', 'id_created' => $configSettingsId];
+                    echo json_encode($response, JSON_PRETTY_PRINT);
+
+                    // Update the 'res.config.settings' record to apply fiscal localization
+                    $updateSettings = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'write', [
+                        [$configSettingsId],
+                        [
+                            'chart_template_id' => $chartTemplateId, // Replace with the ID of the desired chart template
+                        ],
+                    ]);
+                    $response = [ 'status' => 'success', 'settings_updated' => $updateSettings];
+                    echo json_encode($response, JSON_PRETTY_PRINT);
+
+                    // Update the company's chart template
+                    // echo ' compID: '.$newCompanyId;
+                    // echo ' chartID: '.$chartTemplateId;
+                    // $applyChartTemp = $models->execute_kw($db, $uid, $password, 'res.company', 'write', [[$newCompanyId], ['chart_template_id' => $chartTemplateId]]);
+                    // $response = ['status' => 'success', 'chart_template_applied' => $applyChartTemp];
+                    // echo json_encode($response, JSON_PRETTY_PRINT);
+
+                    // Apply fiscal localization and load chart of accounts
+                    $localizationApplied = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'execute', [$configSettingsId]);
+                    $response = ['status' => 'success', 'localization_applied' => $localizationApplied];
+                    echo json_encode($response, JSON_PRETTY_PRINT);
+                    
+                    // $updatedSettings = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'execute', [$configSettingsId]);
+                    // $response = [ 'status' => 'success', 'is_exe' => $updatedSettings];
+                    // echo json_encode($response, JSON_PRETTY_PRINT);
+                }
             }
 
         } 
@@ -787,8 +775,20 @@
        $partnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'search', [[['x_uuid', '=', $customerId]]]);
        $partnerId = $partnerId[0] ?? false;
 
+       $partnerData = $models->execute_kw($db, $uid, $password, 'res.partner', 'read', [$partnerId], ['fields' => ['company_id']]);
+        $companyId = $partnerData[0]['company_id'][0];
+        $companyId = json_encode($companyId);
+       
+        $accountId = $models->execute_kw($db, $uid, $password, 'account.account', 'search', [[['name', '=', 'Expenses'], ['company_id', '=', $companyId]]]);
+        $accountId = $accountId[0] ?? false;
+
+
+        $journalId = $models->execute_kw($db, $uid, $password, 'account.journal', 'search', [[['code', '=', 'BILL'], ['company_id', '=', $companyId]]]);
+        $journalId = $journalId[0] ?? false;
+        echo $journalId;
+        exit;
         //create invoice with associated partner_id/customer
-        $billId = $models->execute_kw($db, $uid, $password, 'account.move', 'create', [['move_type' => 'in_invoice', 'partner_id' => $partnerId]]); 
+        $billId = $models->execute_kw($db, $uid, $password, 'account.move', 'create', [['move_type' => 'in_invoice', 'partner_id' => $partnerId, 'journal_id' => $journalId]]); 
         $response = [ 'status' => 'success', 'id_created' => $billId ];
         echo json_encode($response);
 
@@ -798,7 +798,11 @@
         // Fetch currency id based on name (e.g., 'USD')
         $currencyId = $models->execute_kw($db, $uid, $password, 'res.currency', 'search', [[['name', '=', $currency]]]);
         $currencyId = $currencyId[0] ?? false;
-        
+
+        $accountId = $models->execute_kw($db, $uid, $password, 'account.account', 'search', [[['name', '=', 'Expenses'], ['company_id', '=', $companyId]]]);
+        $accountId = $accountId[0] ?? false;
+        echo $accountId;
+        exit;
         //invoice lines
         $invoiceLineIds = [];
         foreach ($invoiceLines as $line) {
