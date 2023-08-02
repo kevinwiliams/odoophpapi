@@ -3,6 +3,9 @@
     include 'include/connection/mysql_db.php';
     // API endpoint to retrieve data
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+
+        
+        
         // Establish a connection to your MySQL database
         $connection = mysqli_connect($host, $username, $password, $database);
 
@@ -12,7 +15,7 @@
         }
     
         // Query to fetch data from the database
-        $query = "select concat(u.first_name, ' ', u.last_name) name, u.email, u.contact_number phone, rt.key title, ur.is_active, ur.strata_id company_id, s.strata_name, s.email_address, a.* 
+        $queryContacts = "select concat(u.first_name, ' ', u.last_name) name, u.email, u.contact_number phone, rt.key title, ur.is_active, ur.strata_id company_id, s.strata_name, s.email_address, a.* 
         from user_roles ur
         join users u on u.id = ur.user_id
         join role_types rt on rt.id = ur.role_type_id
@@ -20,12 +23,12 @@
         join addresses a on a.id = s.address_id
         where ur.is_active = 1";
 
-        $queryCompanies = "select s.id, s.strata_name, s.email_address, a.* from stratas s
-        join addresses a on a.id = s.address_id";
+        $queryCompanies = "select s.uuid, s.id, s.strata_name, s.email_address, s.contact_number, 'JM' country, 'JMD' currency, a.* from stratas s
+        join addresses a on a.id = s.address_id where s.id";
 
-        $queryProducts = "select name, 'code', 'service', unit_cost_in_cents, strata_id from items";
+        $queryProducts = "select name, 'code', 'service' type, unit_cost_in_cents, strata_id from items";
 
-        $result = mysqli_query($connection, $query);
+        $result = mysqli_query($connection, $queryCompanies);
     
         // Check if the query execution was successful
         if (!$result) {
@@ -39,9 +42,141 @@
         // Set the response header and encode the data as JSON
         header('Content-Type: application/json');
         echo json_encode($data);
+
+
+        $flds = ($data);
+
+        
     
         // Close the database connection
         mysqli_close($connection);
+
+        exit;
+        include_once('include/connection/odoo_db.php');
+        require_once('include/ripcord/ripcord.php');
+
+        $common = ripcord::client("$url/xmlrpc/2/common");
+        $listing = $common->version();
+        // echo (json_encode($listing, JSON_PRETTY_PRINT));
+
+        //authenicate user
+        $uid = $common->authenticate($db, $username, $password, array());
+        if ($uid) {
+            echo 'Autheniticated';
+        } else {
+            echo 'Not authenticated';
+        }
+
+        //connect to odoo models
+        $models = ripcord::client("$url/xmlrpc/2/object");
+        
+        // $flds = $models->execute_kw($db, $uid, $password, 'res.company', 'read', [1]);
+        // echo json_encode($flds, JSON_PRETTY_PRINT);
+
+        foreach ($flds as $item) {
+            // echo $item['name'];
+ 
+             $companyName = $item['strata_name'];
+                 $companyEmail = $item['email_address'];
+                 $companyPhone = $item['contact_number'];
+                 $currency = $item['currency'];
+                 $country = $item['country'];
+                 $uuid = $item['uuid'];
+                 $fiscalLastDay = $item['fiscal_last_day'] ?? 31;
+ 
+             // Fetch currency id based on name (e.g., 'USD')
+                 $currenyId = $models->execute_kw($db, $uid, $password, 'res.currency', 'search', [[['name', '=', $currency]]]);
+                 $currenyId = $currenyId[0] ?? false;
+ 
+                 $countryId = $models->execute_kw($db, $uid, $password, 'res.country', 'search', [[['code', '=', $country]]]);
+                 $countryId = $countryId[0] ?? false;
+ 
+                 // First, create the partner with the mailing address details
+                 $partnerData = [
+                     'name' => $companyName,
+                     'email' => $companyEmail,
+                     'phone' => $companyPhone,
+                     // Other partner data...
+                     'street' => $item['address_line_1'],
+                     'city' => $item['city'],
+                     'x_uuid' => $uuid,
+                     'country_id' => $countryId, // ID of the country for the mailing address
+                     'is_company' => true
+                 ];
+ 
+                 $newPartnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'create', [$partnerData]);
+ 
+                 // Next, create the company and link it to the partner with the mailing address
+ 
+             
+                 $companyData = [
+                     'x_uuid' => $uuid, // Name of the company
+                     'name' => $companyName, // Name of the company
+                     'email' => $companyEmail,
+                     'phone' => $companyPhone,
+                     'currency_id' => intval($currenyId), // ID of the currency used in the company
+                     'account_fiscal_country_id' => $countryId, // ID of the country where the company is located
+                     // 'chart_template_id' => 1, // Link the company to an account chart template (fiscal localization)
+                     // // Other company data...
+                     //journal
+                 ];
+                 
+                 $newCompanyId = $models->execute_kw($db, $uid, $password, 'res.company', 'create', [$companyData]);
+                 $response = [ 'status' => 'success', 'id_created' => $newCompanyId];
+                 echo json_encode($response, JSON_PRETTY_PRINT);
+ 
+                 if (is_int($newCompanyId)) {
+                     // Get the current year
+                     $currentYear = date('Y');
+ 
+                     // Set the month and day to get the first day of January
+                     $firstMonth = '01';
+                     $firstDay = '01';
+ 
+                     // Create the date string in the format "YYYY-MM-DD"
+                     $lockDate = $currentYear . '-' . $firstMonth . '-' . $firstDay;
+             
+                     $chartTemplateId = 1;
+                     // Configure fiscal period
+                     $settingsData = [
+                         'company_id' => $newCompanyId,
+                         // 'chart_template_id' => 1, // Link the company to an account chart template (fiscal localization)
+                         'fiscalyear_last_day' => $fiscalLastDay, // Last day of the fiscal year
+                         'fiscalyear_last_month' => "12", // Last month of the fiscal year
+                         'fiscalyear_lock_date' => $lockDate, // Lock date for fiscal year
+                         // Other fiscal period configuration...
+                     ];
+                     $configSettingsId = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'create', [$settingsData]);
+                     $response = [ 'status' => 'success', 'id_created' => $configSettingsId];
+                     echo json_encode($response, JSON_PRETTY_PRINT);
+ 
+                     // Update the 'res.config.settings' record to apply fiscal localization
+                     $updateSettings = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'write', [
+                         [$configSettingsId],
+                         [
+                             'chart_template_id' => $chartTemplateId, // Replace with the ID of the desired chart template
+                         ],
+                     ]);
+                     $response = [ 'status' => 'success', 'settings_updated' => $updateSettings];
+                     echo json_encode($response, JSON_PRETTY_PRINT);
+ 
+                     // Update the company's chart template
+                     // echo ' compID: '.$newCompanyId;
+                     // echo ' chartID: '.$chartTemplateId;
+                     // $applyChartTemp = $models->execute_kw($db, $uid, $password, 'res.company', 'write', [[$newCompanyId], ['chart_template_id' => $chartTemplateId]]);
+                     // $response = ['status' => 'success', 'chart_template_applied' => $applyChartTemp];
+                     // echo json_encode($response, JSON_PRETTY_PRINT);
+ 
+                     // Apply fiscal localization and load chart of accounts
+                     $localizationApplied = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'execute', [$configSettingsId]);
+                     $response = ['status' => 'success', 'localization_applied' => $localizationApplied];
+                     echo json_encode($response, JSON_PRETTY_PRINT);
+                     
+                     // $updatedSettings = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'execute', [$configSettingsId]);
+                     // $response = [ 'status' => 'success', 'is_exe' => $updatedSettings];
+                     // echo json_encode($response, JSON_PRETTY_PRINT);
+                 }
+         }
     
         exit;
     }
@@ -66,8 +201,6 @@
 
         //connect to odoo models
         $models = ripcord::client("$url/xmlrpc/2/object");
-
-        
         $arrContextOptions = array(
             "ssl" => array(
             "verify_peer" => false,
@@ -75,37 +208,69 @@
             )
         );
         $context = stream_context_create($arrContextOptions);
-
         $response = file_get_contents('https://odoophpapi.test', false, $context);
 
+        echo $response;
+
         // Process the API response
-        if ($response) {
+        if ($response === null && json_last_error() !== JSON_ERROR_NONE) {
+            echo 'Error decoding JSON: ' . json_last_error_msg();
+        } else {
+            echo "inside";
             // Decode the JSON response into an associative array
             $data = json_decode($response, true);
-
+            echo $data;
+            //print_r($data);
+            exit;
+            
             // Process the data as needed
-            foreach ($data as $item) {
-                $itemData = 
-                [
-                    'name' => $item['first_name'].' '. $item['last_name'],
-                    'phone'  => $item['contact_number'], //area code required
-                    'email'  => $item['email'],
-                    // 'function' => 'Developer'
+           foreach ($data as $item) {
+                // $itemData = 
+                //     [
+                //         'name' => $item['first_name'].' '. $item['last_name'],
+                //         'phone'  => $item['contact_number'], //area code required
+                //         'email'  => $item['email'],
+                //         // 'function' => 'Developer'
+                //     ];
+
+                // $new_id = $models->execute_kw($db, $uid, $password, 'res.partner', 'create', [$itemData]); 
+                
+                
+                  //posted fields
+                $companyName = $item['strata_name'];
+                $companyEmail = $item['email_address'];
+                $companyPhone = $item['email_address'];
+                $currency = $item['currency'];
+                $country = $item['country'];
+                $uuid = $item['id'];
+                $fiscalLastDay = $item['fiscal_last_day'] ?? 31;
+
+
+                // Fetch currency id based on name (e.g., 'USD')
+                $currenyId = $models->execute_kw($db, $uid, $password, 'res.currency', 'search', [[['name', '=', $currency]]]);
+                $currenyId = $currenyId[0] ?? false;
+
+                $countryId = $models->execute_kw($db, $uid, $password, 'res.country', 'search', [[['code', '=', $country]]]);
+                $countryId = $countryId[0] ?? false;
+
+                $companyData = [
+                    'name' => $companyName, // Name of the company
+                    'email' => $companyEmail,
+                    'phone' => $companyPhone,
+                    'currency_id' => intval($currenyId), // ID of the currency used in the company
+                    'account_fiscal_country_id' => $countryId, // ID of the country where the company is located
+                    'x_uuid' => $uuid
+                    // 'chart_template_id' => 1, // Link the company to an account chart template (fiscal localization)
+                    // // Other company data...
+                    //journal
                 ];
-
-                $new_id = $models->execute_kw($db, $uid, $password, 'res.partner', 'create', [$itemData]); 
                 
-                
+                // $newCompanyId = $models->execute_kw($db, $uid, $password, 'res.company', 'create', [$companyData]);
+                // $response = [ 'status' => 'success', 'idCreated' => $newCompanyId];
+                // echo json_encode($response, JSON_PRETTY_PRINT);
             }
-            $response = [ 'status' => 'success', 'idCreated' => $new_id];
-            echo json_encode($response, JSON_PRETTY_PRINT);
 
-        } else {
-            $response = [ 'status' => 'failed'];
-            echo json_encode($response, JSON_PRETTY_PRINT);
-            //echo 'API request failed.';
-            // Handle the failure as needed
-        }
+        } 
     }
     
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_REQUEST['e'] == 'contact') {
@@ -114,10 +279,11 @@
         $contactData = json_decode($postData, true);
 
         // Extract invoice fields from the JSON data
+        $uuid = $contactData['uuid'];
         $name = $contactData['name'];
         $email = $contactData['email'];
         $phone = $contactData['phone'];
-        $company = $contactData['company_id'];
+        $company = $contactData['company_uuid'];
 
         include_once('include/connection/odoo_db.php');
         require_once('include/ripcord/ripcord.php');
@@ -137,12 +303,17 @@
         //connect to odoo models
         $models = ripcord::client("$url/xmlrpc/2/object");
 
+        // Fetch company id based on VM UUID
+        $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $company]]]);
+        $companyId = $companyId[0] ?? false;
+
         $itemData = 
                 [[
+                    'x_uuid' => $uuid,
                     'name' => $name,
                     'phone'  => $phone, //area code required
                     'email'  => $email,
-                    'company_id' => 1,
+                    'company_id' => $companyId,
                     // 'commercial_partner_id' => 52,
                     // 'company_name' => 'My Company (San Francisco)',
                     'is_company' => false
@@ -159,6 +330,7 @@
          $companyData = json_decode($postData, true);
 
         //posted fields
+        $uuid = $companyData['uuid'];
         $companyName = $companyData['name'];
         $companyEmail = $companyData['email'];
         $companyPhone = $companyData['phone'];
@@ -191,8 +363,26 @@
 
         $countryId = $models->execute_kw($db, $uid, $password, 'res.country', 'search', [[['code', '=', $country]]]);
         $countryId = $countryId[0] ?? false;
+
+        // First, create the partner with the mailing address details
+        $partnerData = [
+            'name' => $companyName,
+            'email' => $companyEmail,
+            'phone' => $companyPhone,
+            // Other partner data...
+            'street' => 'address_line_1',
+            'city' => 'city',
+            'country_id' => $countryId, // ID of the country for the mailing address
+            'is_company' => true
+        ];
+
+        $newPartnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'create', [$partnerData]);
+
+        // Next, create the company and link it to the partner with the mailing address
+
       
         $companyData = [
+            'x_uuid' => $uuid, // Name of the company
             'name' => $companyName, // Name of the company
             'email' => $companyEmail,
             'phone' => $companyPhone,
@@ -267,12 +457,12 @@
 
         //posted fields
        $invoiceNumber = $invoiceInfo['name'] ?? false;
-       $partnerId = $invoiceInfo['customer_id'];
+       $customer_uuid = $invoiceInfo['customer_id'];
+       $company_uuid = $invoiceInfo['company_id'];
        $invoiceDate = $invoiceInfo['invoice_date'];
        $invoiceDateDue = $invoiceInfo['invoice_date_due'];
        $currency = $invoiceInfo['currency'];
        $paymentTerm = $invoiceInfo['payment_term'];
-       $accountId = $invoiceInfo['account_id'] ?? 21;
        $invoiceLines = $invoiceInfo['invoice_lines'];
         //connect to odoo
        include('include/connection/odoo_db.php');
@@ -287,28 +477,58 @@
        
         //load odoo models
        $models = ripcord::client("$url/xmlrpc/2/object");
-    
+
+      
+
+       // Fetch company id based on VM UUID
+       $partnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'search', [[['x_uuid', '=', $customer_uuid]]]);
+       $partnerId = $partnerId[0] ?? false;
+       echo 'PARTID:'.$partnerId;
+
+
+       // Fetch company id based on VM UUID
+       $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $company_uuid]]]);
+       $companyId = $companyId[0] ?? false;
+       echo 'COMP:'.($companyId);
+
+
+        // Fetch account id based on VM UUID
+        $accountId = $models->execute_kw($db, $uid, $password, 'account.account', 'search', [[['name', '=', 'Product Sales'], ['company_id', '=', $companyId]]]);
+        $accountId = $accountId[0] ?? false;
+        echo 'ACID:'.($accountId);
+        
+        // exit;
        //create invoice with associated partner_id/customer
-       $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'create', [['move_type' => 'out_invoice', 'partner_id' => $partnerId]]); 
+       $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'create', [['move_type' => 'out_invoice', 'partner_id' => $partnerId, 'company_id' => $companyId]]); 
        $response = [ 'status' => 'success', 'id_created' => $invoiceId ];
         echo json_encode($response);
 
         //if ID is created 
         if (is_int($invoiceId)) {
-
             // Fetch currency id based on name (e.g., 'USD')
             $currencyId = $models->execute_kw($db, $uid, $password, 'res.currency', 'search', [[['name', '=', $currency]]]);
             $currencyId = $currencyId[0] ?? false;
             //invoice data
             $invoiceLineIds = [];
             foreach ($invoiceLines as $line) {
+                $tax = null;
+            
+                // Fetch currency id based on name (e.g., 'USD')
+                $productId = $models->execute_kw($db, $uid, $password, 'product.product', 'search', [[['x_uuid', '=', $line['product_id']]]]);
+                $productId = $productId[0] ?? false;
+
+                if($line['tax']){
+                    $tax =  $models->execute_kw($db, $uid, $password, 'account.tax', 'search', [[['type_tax_use', '=', 'sale'], ['company_id', '=', $companyId]]]);
+                    echo('TAXID:'.$tax[0]);
+                }
+
                 $invoiceLineIds[] = [0, false, [
-                    'product_id' => $line['product_id'],
+                    'product_id' => $productId,
                     'name' => $line['name'] ?? false,
                     'quantity' => $line['quantity'],
-                    'price_unit' => $line['price'] ?? false,
+                    'price_unit' => $line['price']/100 ?? false,
                     'account_id' => $accountId,
-                    'tax_ids' => $line['tax_ids'] ?? []
+                    'tax_ids' => [$tax[0]]
                 ]];
             }
 
@@ -316,7 +536,7 @@
                 'name' => $invoiceNumber,
                 'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format) //default to today's date if not set
                 //   'invoice_date_due' =>  $invoiceDateDue,
-                'company_id' => 1, // Company associated with the invoice
+                'company_id' => $companyId, // Company associated with the invoice
                 'company_currency_id' => $currencyId,
                 'currency_id' => $currencyId, // Currency used in the invoice
                 'invoice_payment_term_id' => $paymentTerm, //payment terms
@@ -362,17 +582,29 @@
     $paymentInfo = json_decode($postData, true);
 
     //posted fields
-     $partnerId = $paymentInfo['customer_id'];
+     $customerId = $paymentInfo['customer_id'];
      $paymentDate = $paymentInfo['payment_date'];
      $amount = $paymentInfo['amount'];
      $paymentMethodId = $paymentInfo['payment_method'];
      $journalId = $paymentInfo['journalId'] ?? 8;
      $invoiceNumber = $paymentInfo['invoice_num'];
 
+      $partnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'search', [[['x_uuid', '=', $customerId]]]);
+      $partnerId = $partnerId[0] ?? false;
+
+      $partnerData = $models->execute_kw($db, $uid, $password, 'res.partner', 'read', [$partnerId], ['fields' => ['company_id']]);
+      $companyId = $partnerData[0]['company_id'][0];
+      $companyId = json_encode($companyId);
+    //   echo ($companyId);
+    
+     $journalId = $models->execute_kw($db, $uid, $password, 'account.journal', 'search', [[['code', '=', 'BNK1'], ['company_id', '=', intval($companyId)]]]);
+     $journalId = json_encode($journalId[0]);
+
       // Fetch invoice ID based on invoice number (e.g., 'INV/2023/00055')
       $invoiceNum = $invoiceNumber;
-      $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['payment_reference', '=', $invoiceNum]]]);
+      $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['payment_reference', '=', $invoiceNum]]], );
       $invoiceId = $invoiceId[0] ?? false;
+      
       echo ('inoviceId '. $invoiceId );
       // exit;
      
@@ -383,11 +615,12 @@
       
       // Create the payment register record
       $paymentRegisterData = [
+        //   'company_id' => $companyId, // ID of the company associated
           'partner_id' => $partnerId, // ID of the customer or partner
           'payment_date' => $paymentDate, // Date of the payment (YYYY-MM-DD format)
           'journal_id' => $journalId,
           'payment_method_line_id' => $paymentMethodId,
-          'amount' => $amount, // Amount of the payment
+          'amount' => $amount/100, // Amount of the payment
       ];
       $paymentRegisterId = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'create', [$paymentRegisterData], ['context' => $context]);
       $response = ['status' => 'success', 'payment_created' => $paymentRegisterId,];
@@ -395,7 +628,9 @@
       
       // Create the payments based on the payment register
       if (is_int($paymentRegisterId)) {
-          $models->execute_kw($db, $uid, $password, 'account.payment.register', 'action_create_payments', [$paymentRegisterId]);
+          $regPayment = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'action_create_payments', [$paymentRegisterId]);
+          $response = ['status' => 'success', 'payment_registered' => $regPayment,];
+        echo json_encode($response);
       }
 
    }
@@ -417,12 +652,15 @@
         $models = ripcord::client("$url/xmlrpc/2/object"); 
         
         //posted fields
-         $partnerId = $_POST['partnerId'];
+         $customerId = $_POST['partnerId'];
          $paymentDate = $_POST['paymentDate'];
          $amount = $_POST['amount'];
          $paymentMethodId = $_POST['paymentMethodId'];
          $journalId = $_POST['journalId'];
          $invoiceNumber = $_POST['invoiceNumber'];
+
+         $partnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'search', [[['x_uuid', '=', $customerId]]]);
+        $partnerId = $partnerId[0] ?? false;
          
         // create payment with associated partner_id/customer
         $paymentId = $models->execute_kw($db, $uid, $password, 'account.payment', 'create', [['payment_type' => 'inbound', 'partner_id' => $partnerId]]); 
@@ -524,7 +762,7 @@
         $billInfo = json_decode($postData, true);
 
         //posted fields
-        $partnerId = $billInfo['customer_id'];
+        $customerId = $billInfo['customer_id'];
         $invoiceDate = $billInfo['bill_date'];
         $accountId = $billInfo['accountId'] ?? 26;
         $invoiceNumber = $billInfo['reference'];
@@ -545,6 +783,9 @@
        }
 
        $models = ripcord::client("$url/xmlrpc/2/object");
+
+       $partnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'search', [[['x_uuid', '=', $customerId]]]);
+       $partnerId = $partnerId[0] ?? false;
 
         //create invoice with associated partner_id/customer
         $billId = $models->execute_kw($db, $uid, $password, 'account.move', 'create', [['move_type' => 'in_invoice', 'partner_id' => $partnerId]]); 
@@ -610,7 +851,8 @@
         $productPrice = $productData['price'];
         $productSalesTax = $productData['sales_tax'];
         $productVendorTax = $productData['vendor_tax'];
-        $companyId = $productData['company_id'];
+        $company_uuid = $productData['company_id'];
+        $product_uuid = $productData['uuid'];
 
 
 
@@ -632,7 +874,12 @@
         //connect to odoo models
         $models = ripcord::client("$url/xmlrpc/2/object");
 
+        // Fetch company id based on VM UUID
+       $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $company_uuid]]]);
+       $companyId = $companyId[0] ?? false;
+
         $productData = [
+            'x_uuid' => $product_uuid, // Name of the product
             'name' => $productName, // Name of the product
             'type' => $productType, // Type of the product (e.g., 'product', 'service')
             'list_price' => $productPrice / 100, // Sales price of the product
