@@ -1,6 +1,17 @@
 <?php
 
     include 'include/connection/mysql_db.php';
+
+    function generateCode($string, $endDigit) {
+        // Extract the first two characters of the string
+        $prefix = substr($string, 0, 2);
+    
+        // Concatenate with the supplied end digit
+        $code = strtoupper($prefix . str_pad($endDigit, 4, '0', STR_PAD_LEFT));
+    
+        return $code;
+    }
+
     // API endpoint to retrieve data
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
@@ -21,12 +32,13 @@
         join role_types rt on rt.id = ur.role_type_id
         join stratas s on s.id = ur.strata_id
         join addresses a on a.id = s.address_id
-        where ur.is_active = 1";
+        where ur.is_active = 1 and u.id > 2";
 
         $queryCompanies = "select s.uuid, s.id, s.strata_name, s.email_address, s.contact_number, 'JM' country, 'JMD' currency, a.* from stratas s
         join addresses a on a.id = s.address_id";
 
-        $queryProducts = "select name, 'code', 'service' type, unit_cost_in_cents, strata_id from items";
+        $queryProducts = "select i.*, s.uuid company_id, 'service' type, '2' category from items i
+                        join stratas s on s.id = i.strata_id where i.is_active = 1";
 
         $result = mysqli_query($connection, $queryContacts);
     
@@ -55,7 +67,7 @@
        
     }
 
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_REQUEST['e'] == 'load') {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_REQUEST['e'] == 'loadcompany') {
         
 
         include_once('include/connection/odoo_db.php');
@@ -170,28 +182,10 @@
 
                 $countryId = $models->execute_kw($db, $uid, $password, 'res.country', 'search', [[['code', '=', $country]]]);
                 $countryId = $countryId[0] ?? false;
-
-                // // First, create the partner with the mailing address details
-                // $partnerData = [
-                //     'x_uuid' => $uuid,
-                //     'name' => $companyName,
-                //     'email' => $companyEmail,
-                //     'phone' => $companyPhone,
-                //     // Other partner data...
-                //     'street' => $companyAddress,
-                //     'city' => 'city',
-                //     'country_id' => $countryId, // ID of the country for the mailing address
-                //     'is_company' => true
-                // ];
-
-                // $newPartnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'create', [$partnerData]);
-
-                // // Next, create the company and link it to the partner with the mailing address
-
-            
+              
                 $companyData = [
                     'x_uuid' => $uuid, // Name of the company
-                    'name' => $companyName.'-VM', // Name of the company
+                    'name' => $companyName, // Name of the company
                     'email' => $companyEmail,
                     'phone' => $companyPhone,
                     'currency_id' => intval($currenyId), // ID of the currency used in the company
@@ -240,22 +234,169 @@
                     $response = [ 'status' => 'success', 'settings_updated' => $updateSettings];
                     echo json_encode($response, JSON_PRETTY_PRINT);
 
-                    // Update the company's chart template
-                    // echo ' compID: '.$newCompanyId;
-                    // echo ' chartID: '.$chartTemplateId;
-                    // $applyChartTemp = $models->execute_kw($db, $uid, $password, 'res.company', 'write', [[$newCompanyId], ['chart_template_id' => $chartTemplateId]]);
-                    // $response = ['status' => 'success', 'chart_template_applied' => $applyChartTemp];
-                    // echo json_encode($response, JSON_PRETTY_PRINT);
-
                     // Apply fiscal localization and load chart of accounts
                     $localizationApplied = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'execute', [$configSettingsId]);
                     $response = ['status' => 'success', 'localization_applied' => $localizationApplied];
                     echo json_encode($response, JSON_PRETTY_PRINT);
                     
-                    // $updatedSettings = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'execute', [$configSettingsId]);
-                    // $response = [ 'status' => 'success', 'is_exe' => $updatedSettings];
-                    // echo json_encode($response, JSON_PRETTY_PRINT);
+                 
                 }
+            }
+
+        } 
+    }
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_REQUEST['e'] == 'loadcontacts') {
+        
+
+        include_once('include/connection/odoo_db.php');
+        require_once('include/ripcord/ripcord.php');
+
+        $common = ripcord::client("$url/xmlrpc/2/common");
+        $listing = $common->version();
+        // echo (json_encode($listing, JSON_PRETTY_PRINT));
+
+        //authenicate user
+        $uid = $common->authenticate($db, $username, $password, array());
+        if ($uid) {
+            echo 'Autheniticated';
+        } else {
+            echo 'Not authenticated';
+        }
+
+        //connect to odoo models
+        $models = ripcord::client("$url/xmlrpc/2/object");
+        $arrContextOptions = array(
+            "ssl" => array(
+            "verify_peer" => false,
+            "verify_peer_name" => false,
+            )
+        );
+        $context = stream_context_create($arrContextOptions);
+        $response = file_get_contents('https://odoophpapi.test/', false, $context);
+
+        //echo $response;
+
+        // Process the API response
+        if ($response === null && json_last_error() !== JSON_ERROR_NONE) {
+            echo 'Error decoding JSON: ' . json_last_error_msg();
+        } else {
+            echo "inside";
+            // Decode the JSON response into an associative array
+            $data = json_decode($response, true);
+          
+            // Process the data as needed
+           foreach ($data as $item) {
+            //posted fields
+            $uuid = $item['uuid'];
+            $name = $item['name'];
+            $title = ucfirst($item['title']);
+            $email = $item['email'];
+            $phone = $item['phone'] ?? '';
+            $company = $item['company_uuid'];
+
+            // Fetch company id based on VM UUID
+            $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $company]]]);
+            $companyId = $companyId[0] ?? false;
+
+            $itemData = 
+                    [[
+                        'x_uuid' => $uuid,
+                        'name' => $name,
+                        // 'title' => $title,
+                        'phone'  => $phone, //area code required
+                        'email'  => $email,
+                        'company_id' => intval($companyId),
+                        'is_company' => false
+                    ]];
+            
+            // echo json_encode($itemData, JSON_PRETTY_PRINT);
+
+            $new_id = $models->execute_kw($db, $uid, $password, 'res.partner', 'create', $itemData); 
+            $response = [ 'status' => 'success', 'id_created' => $new_id];
+            echo json_encode($response, JSON_PRETTY_PRINT);
+
+            }
+
+        } 
+    }
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_REQUEST['e'] == 'loadproducts') {
+        
+
+        include_once('include/connection/odoo_db.php');
+        require_once('include/ripcord/ripcord.php');
+
+        $common = ripcord::client("$url/xmlrpc/2/common");
+        $listing = $common->version();
+        // echo (json_encode($listing, JSON_PRETTY_PRINT));
+
+        //authenicate user
+        $uid = $common->authenticate($db, $username, $password, array());
+        if ($uid) {
+            echo 'Autheniticated';
+        } else {
+            echo 'Not authenticated';
+        }
+
+        //connect to odoo models
+        $models = ripcord::client("$url/xmlrpc/2/object");
+        $arrContextOptions = array(
+            "ssl" => array(
+            "verify_peer" => false,
+            "verify_peer_name" => false,
+            )
+        );
+        $context = stream_context_create($arrContextOptions);
+        $response = file_get_contents('https://odoophpapi.test/', false, $context);
+
+        //echo $response;
+
+        // Process the API response
+        if ($response === null && json_last_error() !== JSON_ERROR_NONE) {
+            echo 'Error decoding JSON: ' . json_last_error_msg();
+        } else {
+            echo "inside";
+            // Decode the JSON response into an associative array
+            $data = json_decode($response, true);
+          
+            // Process the data as needed
+           foreach ($data as $item) {
+                //posted fields
+                $productName = $item['name'];
+                $productType = $item['type'];
+                $productCat = $item['category'];
+                $productPrice = $item['unit_cost_in_cents'];
+                $productSalesTax = $item['sales_tax'] ?? false;
+                $productVendorTax = $item['vendor_tax'] ?? false;
+                $company_uuid = $item['company_id'];
+                $product_uuid = $item['uuid'];
+
+                // Fetch company id based on VM UUID
+                // Fetch company id based on VM UUID
+                $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $company_uuid]]]);
+                $companyId = $companyId[0] ?? false;
+
+                $productCode = generateCode($productName, $companyId);
+
+                $productData = [
+                    'x_uuid' => $product_uuid, // Name of the product
+                    'name' => $productName, // Name of the product
+                    'type' => $productType, // Type of the product (e.g., 'product', 'service')
+                    'list_price' => $productPrice / 100, // Sales price of the product
+                    'default_code' => $productCode, // Unique code or reference for the product
+                    'categ_id' => $productCat, // Category of the product (optional) - default - All
+                    'company_id' => $companyId, // Company associated with the product (optional); Admin user only can apply associated ID
+                    'taxes_id' => [], // Tax applied to product
+                    'supplier_taxes_id' => [] //Vender tax applied to product
+                    
+                ];
+
+                $newProductId = $models->execute_kw($db, $uid, $password, 'product.product', 'create', [$productData]);
+        
+                $response = [ 'status' => 'success', 'id_created' => $newProductId];
+                echo json_encode($response, JSON_PRETTY_PRINT);
+
             }
 
         } 
@@ -481,13 +622,13 @@
 
 
         // Fetch account id based on VM UUID
-        $accountId = $models->execute_kw($db, $uid, $password, 'account.account', 'search', [[['name', '=', 'Product Sales'], ['company_id', '=', $companyId]]]);
+        $accountId = $models->execute_kw($db, $uid, $password, 'account.account', 'search', [[['name', '=', 'Product Sales'], ['company_id', '=', intval($companyId)]]]);
         $accountId = $accountId[0] ?? false;
         echo 'ACID:'.($accountId);
         
         // exit;
        //create invoice with associated partner_id/customer
-       $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'create', [['move_type' => 'out_invoice', 'partner_id' => $partnerId, 'company_id' => $companyId]]); 
+       $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'create', [['move_type' => 'out_invoice', 'partner_id' => $partnerId, 'company_id' => intval($companyId)]]); 
        $response = [ 'status' => 'success', 'id_created' => $invoiceId ];
         echo json_encode($response);
 
@@ -506,7 +647,7 @@
                 $productId = $productId[0] ?? false;
 
                 if($line['tax']){
-                    $tax =  $models->execute_kw($db, $uid, $password, 'account.tax', 'search', [[['type_tax_use', '=', 'sale'], ['company_id', '=', $companyId]]]);
+                    $tax =  $models->execute_kw($db, $uid, $password, 'account.tax', 'search', [[['type_tax_use', '=', 'sale'], ['company_id', '=', intval($companyId)]]]);
                     echo('TAXID:'.$tax[0]);
                 }
 
@@ -524,7 +665,7 @@
                 'name' => $invoiceNumber,
                 'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format) //default to today's date if not set
                 //   'invoice_date_due' =>  $invoiceDateDue,
-                'company_id' => $companyId, // Company associated with the invoice
+                'company_id' => intval($companyId), // Company associated with the invoice
                 'company_currency_id' => $currencyId,
                 'currency_id' => $currencyId, // Currency used in the invoice
                 'invoice_payment_term_id' => $paymentTerm, //payment terms
@@ -606,7 +747,7 @@
         //   'company_id' => $companyId, // ID of the company associated
           'partner_id' => $partnerId, // ID of the customer or partner
           'payment_date' => $paymentDate, // Date of the payment (YYYY-MM-DD format)
-          'journal_id' => $journalId,
+          'journal_id' => intval($journalId),
           'payment_method_line_id' => $paymentMethodId,
           'amount' => $amount/100, // Amount of the payment
       ];
@@ -893,7 +1034,7 @@
             'list_price' => $productPrice / 100, // Sales price of the product
             'default_code' => $productCode, // Unique code or reference for the product
             'categ_id' => $productCat, // Category of the product (optional) - default - All
-            'company_id' => $companyId, // Company associated with the product (optional); Admin user only can apply associated ID
+            'company_id' => intval($companyId), // Company associated with the product (optional); Admin user only can apply associated ID
             'taxes_id' => [], // Tax applied to product
             'supplier_taxes_id' => [] //Vender tax applied to product
             
