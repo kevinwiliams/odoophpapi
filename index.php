@@ -783,10 +783,10 @@
         $accountId = $accountId[0] ?? false;
 
 
-        $journalId = $models->execute_kw($db, $uid, $password, 'account.journal', 'search', [[['code', '=', 'BILL'], ['company_id', '=', $companyId]]]);
+        $journalId = $models->execute_kw($db, $uid, $password, 'account.journal', 'search', [[['code', '=', 'BILL'], ['company_id', '=', intval($companyId)]]]);
         $journalId = $journalId[0] ?? false;
-        echo $journalId;
-        exit;
+        // echo ($journalId);
+        // exit;
         //create invoice with associated partner_id/customer
         $billId = $models->execute_kw($db, $uid, $password, 'account.move', 'create', [['move_type' => 'in_invoice', 'partner_id' => $partnerId, 'journal_id' => $journalId]]); 
         $response = [ 'status' => 'success', 'id_created' => $billId ];
@@ -799,15 +799,19 @@
         $currencyId = $models->execute_kw($db, $uid, $password, 'res.currency', 'search', [[['name', '=', $currency]]]);
         $currencyId = $currencyId[0] ?? false;
 
-        $accountId = $models->execute_kw($db, $uid, $password, 'account.account', 'search', [[['name', '=', 'Expenses'], ['company_id', '=', $companyId]]]);
+        $accountId = $models->execute_kw($db, $uid, $password, 'account.account', 'search', [[['name', '=', 'Expenses'], ['company_id', '=', intval($companyId)]]]);
         $accountId = $accountId[0] ?? false;
-        echo $accountId;
-        exit;
+        // echo $accountId;
+        // exit;
         //invoice lines
         $invoiceLineIds = [];
         foreach ($invoiceLines as $line) {
+             // Fetch currency id based on name (e.g., 'USD')
+             $productId = $models->execute_kw($db, $uid, $password, 'product.product', 'search', [[['x_uuid', '=', $line['product_id']]]]);
+             $productId = $productId[0] ?? false;
+
             $invoiceLineIds[] = [0, false, [
-                'product_id' => $line['product_id'],
+                'product_id' => $productId,
                 'name' => $line['name'] ?? false,
                 'quantity' => $line['quantity'],
                 'price_unit' => $line['price'] ?? false,
