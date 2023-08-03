@@ -40,7 +40,14 @@
         $queryProducts = "select i.*, s.uuid company_id, 'service' type, '2' category from items i
                         join stratas s on s.id = i.strata_id where i.is_active = 1";
 
-        $result = mysqli_query($connection, $queryContacts);
+        $queryUnits = "select u.uuid, concat(u.short_description, ' / Lot ' ,u.lot_number) name, s.uuid company_uuid, a.address_line_1 street, p.name city, pr.user_id, us.email, us.contact_number phone from units u
+        join proprietors pr on pr.unit_id = u.id and pr.is_proxy = 1
+        join users us on pr.user_id = us.id
+        join stratas s on u.strata_id = s.id
+        join addresses a on u.address_id = a.id
+        join parishes p on a.parish_id = p.id";
+
+        $result = mysqli_query($connection, $queryUnits);
     
         // Check if the query execution was successful
         if (!$result) {
@@ -306,6 +313,85 @@
                         // 'title' => $title,
                         'phone'  => $phone, //area code required
                         'email'  => $email,
+                        'company_id' => intval($companyId),
+                        'is_company' => false
+                    ]];
+            
+            // echo json_encode($itemData, JSON_PRETTY_PRINT);
+
+            $new_id = $models->execute_kw($db, $uid, $password, 'res.partner', 'create', $itemData); 
+            $response = [ 'status' => 'success', 'id_created' => $new_id];
+            echo json_encode($response, JSON_PRETTY_PRINT);
+
+            }
+
+        } 
+    }
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_REQUEST['e'] == 'loadunits') {
+        
+
+        include_once('include/connection/odoo_db.php');
+        require_once('include/ripcord/ripcord.php');
+
+        $common = ripcord::client("$url/xmlrpc/2/common");
+        $listing = $common->version();
+        // echo (json_encode($listing, JSON_PRETTY_PRINT));
+
+        //authenicate user
+        $uid = $common->authenticate($db, $username, $password, array());
+        if ($uid) {
+            echo 'Autheniticated';
+        } else {
+            echo 'Not authenticated';
+        }
+
+        //connect to odoo models
+        $models = ripcord::client("$url/xmlrpc/2/object");
+        $arrContextOptions = array(
+            "ssl" => array(
+            "verify_peer" => false,
+            "verify_peer_name" => false,
+            )
+        );
+        $context = stream_context_create($arrContextOptions);
+        $response = file_get_contents('https://odoophpapi.test/', false, $context);
+
+        //echo $response;
+
+        // Process the API response
+        if ($response === null && json_last_error() !== JSON_ERROR_NONE) {
+            echo 'Error decoding JSON: ' . json_last_error_msg();
+        } else {
+            echo "inside";
+            // Decode the JSON response into an associative array
+            $data = json_decode($response, true);
+          
+            // Process the data as needed
+           foreach ($data as $item) {
+            //posted fields
+            $uuid = $item['uuid'];
+            $name = $item['name'];
+            $title = ucfirst($item['title']);
+            $email = $item['email'];
+            $street = $item['street'];
+            $city = $item['city'];
+            $phone = $item['phone'] ?? '';
+            $company = $item['company_uuid'];
+
+            // Fetch company id based on VM UUID
+            $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $company]]]);
+            $companyId = $companyId[0] ?? false;
+
+            $itemData = 
+                    [[
+                        'x_uuid' => $uuid,
+                        'name' => $name,
+                        // 'title' => $title,
+                        'phone'  => $phone, //area code required
+                        'email'  => $email,
+                        'street' => $street,
+                        'city' => $city,
                         'company_id' => intval($companyId),
                         'is_company' => false
                     ]];
