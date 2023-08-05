@@ -12,6 +12,84 @@
         return $code;
     }
 
+    // Function to create an invoice and its lines
+    function createInvoice($models, $companyId, $partnerId, $invoiceNumber, $invoiceDate, $invoiceDateDue, $invoiceLines, $connection)
+    {
+        $db = $connection['db'];
+        $uid = $connection['uid'];
+        $password = $connection['password'];
+
+        $invoiceData = [
+            'move_type' => 'out_invoice', // Type of the invoice (in_invoice for vendor invoice)
+            'partner_id' => $partnerId, // ID of the vendor or partner
+            'company_id' => intval($companyId), // ID of the company for which the invoice is created
+        ];
+
+        // Create the invoice
+        $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'create', [$invoiceData]);
+
+        // Fetch account id based on VM UUID
+        $accountId = $models->execute_kw($db, $uid, $password, 'account.account', 'search', [[['name', '=', 'Product Sales'], ['company_id', '=', intval($companyId)]]]);
+        $accountId = $accountId[0] ?? false;
+        echo 'ACID:'.($accountId);
+
+        // Create the invoice lines
+        foreach ($invoiceLines as $line) {
+
+            $tax = [];
+                
+            // Fetch currency id based on name (e.g., 'USD')
+            $productId = $models->execute_kw($db, $uid, $password, 'product.product', 'search', [[['x_uuid', '=', $line['item_uuid']]]]);
+            $productId = $productId[0] ?? false;
+
+            if($line['tax_rate'] > 0){
+                $tax =  $models->execute_kw($db, $uid, $password, 'account.tax', 'search', [[['type_tax_use', '=', 'sale'], ['company_id', '=', intval($companyId)]]]);
+                echo('TAXID:'.$tax[0]);
+            }
+
+            $invoiceLineIds[] = [0, false, [
+                        'product_id' => $productId,
+                        // 'name' => $line['name'] ?? '',
+                        'quantity' => $line['quantity'],
+                        'price_unit' => $line['unit_cost']/100 ?? 0,
+                        'account_id' => $accountId,
+                        'tax_ids' => (!empty($tax)) ? [$tax[0]] : []
+                    ]];
+        }
+
+        // Fetch currency id based on name (e.g., 'USD')
+        $currencyId = $models->execute_kw($db, $uid, $password, 'res.currency', 'search', [[['name', '=', 'JMD']]]);
+        $currencyId = $currencyId[0] ?? false;
+
+        $invoiceData = [
+                    'name' => $invoiceNumber,
+                    'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format) //default to today's date if not set
+                    'invoice_date_due' =>  $invoiceDateDue,
+                    'company_id' => intval($companyId), // Company associated with the invoice
+                    'company_currency_id' => $currencyId,
+                    'currency_id' => $currencyId, // Currency used in the invoice
+                    'invoice_line_ids' => $invoiceLineIds
+                ];
+        
+                echo json_encode($invoiceData, JSON_PRETTY_PRINT);
+        
+        // update created invoice with journal details
+        $newInvoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$invoiceId],$invoiceData]);
+
+        $response = [ 'status' => 'success', 'is_updated' => $newInvoiceId ];
+        echo json_encode($response);
+        
+        //POST drafted invoice if information provided is valid
+        if ($newInvoiceId) {
+            $postedInvoice = $models->execute_kw($db, $uid, $password, 'account.move', 'action_post', [$invoiceId]);
+
+            $response = [ 'status' => 'success', 'invoice' => $postedInvoice ];
+            echo json_encode($response);
+        }
+
+        return $invoiceId;
+    }
+
     // API endpoint to retrieve data
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
@@ -47,7 +125,13 @@
         join addresses a on u.address_id = a.id
         join parishes p on a.parish_id = p.id";
 
-        $result = mysqli_query($connection, $queryUnits);
+        $queryInvoices = "select s.uuid company_id, inv.uuid inv_uuid, inv.invoice_number, inv.invoice_date, inv.due_date, i.uuid item_uuid, id.quantity, id.unit_cost_in_cents unit_cost, id.tax_rate, u.uuid customer_id from invoices inv
+        join units u on inv.unit_id = u.id
+        join stratas s on s.id = inv.strata_id
+        join invoice_details id on id.invoice_id = inv.id
+        join items i on i.id = id.item_id where inv.id > 160 and inv.id < 166 ";
+
+        $result = mysqli_query($connection, $queryInvoices);
     
         // Check if the query execution was successful
         if (!$result) {
@@ -403,6 +487,109 @@
             echo json_encode($response, JSON_PRETTY_PRINT);
 
             }
+
+        } 
+    }
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_REQUEST['e'] == 'loadinvoices') {
+        
+
+        include_once('include/connection/odoo_db.php');
+        require_once('include/ripcord/ripcord.php');
+
+        $common = ripcord::client("$url/xmlrpc/2/common");
+        $listing = $common->version();
+        // echo (json_encode($listing, JSON_PRETTY_PRINT));
+
+        //authenicate user
+        $uid = $common->authenticate($db, $username, $password, array());
+        if ($uid) {
+            echo 'Autheniticated';
+        } else {
+            echo 'Not authenticated';
+        }
+
+        //connect to odoo models
+        $models = ripcord::client("$url/xmlrpc/2/object");
+        $arrContextOptions = array(
+            "ssl" => array(
+            "verify_peer" => false,
+            "verify_peer_name" => false,
+            )
+        );
+        $context = stream_context_create($arrContextOptions);
+        $response = file_get_contents('https://odoophpapi.test/', false, $context);
+
+        //echo $response;
+
+        // Process the API response
+        if ($response === null && json_last_error() !== JSON_ERROR_NONE) {
+            echo 'Error decoding JSON: ' . json_last_error_msg();
+        } else {
+            echo "inside";
+            // Decode the JSON response into an associative array
+            $dataset = json_decode($response, true);
+
+            // Group the dataset by invoice_id
+            $groupedData = [];
+            foreach ($dataset as $row) {
+                $invoiceId = $row['inv_uuid'];
+                if (!isset($groupedData[$invoiceId])) {
+
+                    // Fetch company id based on VM UUID
+                    $partnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'search', [[['x_uuid', '=', $row['customer_id']]]]);
+                    $partnerId = $partnerId[0] ?? false;
+                    echo 'PARTID:'.$partnerId;
+
+
+                    // Fetch company id based on VM UUID
+                    $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $row['company_id']]]]);
+                    $companyId = $companyId[0] ?? false;
+                    echo 'COMP:'.($companyId);
+
+
+                    $groupedData[$invoiceId] = [
+                        'companyId' => $companyId, 
+                        'partnerId' => $partnerId, 
+                        'invoiceDate' => $row['invoice_date'], 
+                        'invoiceDateDue' => $row['due_date'], 
+                        'invoiceNumber' => $row['invoice_number'], 
+                        'lines' => [],
+                    ];
+                }
+                $groupedData[$invoiceId]['lines'][] = $row;
+
+            }
+            // echo json_encode($groupedData, JSON_PRETTY_PRINT);
+
+            // Loop through each invoice group and create invoices
+            foreach ($groupedData as $invoiceId => $invoiceData) {
+                // Extract companyId and partnerId for the current group
+                $companyId = $invoiceData['companyId'];
+                $partnerId = $invoiceData['partnerId'];
+                $invoiceDate = $invoiceData['invoiceDate'];
+                $invoiceDateDue = $invoiceData['invoiceDateDue'];
+                $invoiceNumber = $invoiceData['invoiceNumber'];
+                $invoiceLines = $invoiceData['lines'];
+
+                // echo ('companyId: '.$companyId.' partnerId: '. $partnerId.' invoiceDate: '. $invoiceDate.' invoiceDateDue: '. $invoiceDateDue.' invoiceNumber: '. $invoiceNumber);
+                // echo json_encode($invoiceLines, JSON_PRETTY_PRINT);
+
+                $connection = [
+                    'db' => $db,
+                    'uid' => $uid,
+                    'password' => $password
+                ];
+
+                // Create the invoice using the extracted companyId and partnerId
+                $invoiceId = createInvoice($models, $companyId, $partnerId, $invoiceNumber, $invoiceDate, $invoiceDateDue, $invoiceLines, $connection);
+                echo "Invoice with ID: $invoiceId created." . PHP_EOL;
+                
+                // sleep(5);
+            }
+
+          
+           
 
         } 
     }
