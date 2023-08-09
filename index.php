@@ -131,7 +131,7 @@
         join invoice_details id on id.invoice_id = inv.id
         join items i on i.id = id.item_id where inv.id > 160 and inv.id < 166 ";
 
-        $result = mysqli_query($connection, $queryInvoices);
+        $result = mysqli_query($connection, $queryProducts);
     
         // Check if the query execution was successful
         if (!$result) {
@@ -696,11 +696,11 @@
 
         //authenicate user
         $uid = $common->authenticate($db, $username, $password, array());
-        if ($uid) {
-            echo 'Autheniticated';
-        } else {
-            echo 'Not authenticated';
-        }
+        // if ($uid) {
+        //     echo 'Autheniticated';
+        // } else {
+        //     echo 'Not authenticated';
+        // }
 
         //connect to odoo models
         $models = ripcord::client("$url/xmlrpc/2/object");
@@ -750,11 +750,11 @@
 
         //authenicate user
         $uid = $common->authenticate($db, $username, $password, array());
-        if ($uid) {
-            echo 'Autheniticated';
-        } else {
-            echo 'Not authenticated';
-        }
+        // if ($uid) {
+        //     echo 'Autheniticated';
+        // } else {
+        //     echo 'Not authenticated';
+        // }
 
         //connect to odoo models
         $models = ripcord::client("$url/xmlrpc/2/object");
@@ -765,23 +765,6 @@
 
         $countryId = $models->execute_kw($db, $uid, $password, 'res.country', 'search', [[['code', '=', $country]]]);
         $countryId = $countryId[0] ?? false;
-
-        // First, create the partner with the mailing address details
-        $partnerData = [
-            'name' => $companyName,
-            'email' => $companyEmail,
-            'phone' => $companyPhone,
-            // Other partner data...
-            'street' => 'address_line_1',
-            'city' => 'city',
-            'country_id' => $countryId, // ID of the country for the mailing address
-            'is_company' => true
-        ];
-
-        $newPartnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'create', [$partnerData]);
-
-        // Next, create the company and link it to the partner with the mailing address
-
       
         $companyData = [
             'x_uuid' => $uuid, // Name of the company
@@ -822,7 +805,7 @@
             ];
             $configSettingsId = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'create', [$settingsData]);
             $response = [ 'status' => 'success', 'id_created' => $configSettingsId];
-            echo json_encode($response, JSON_PRETTY_PRINT);
+            // echo json_encode($response, JSON_PRETTY_PRINT);
 
             // Update the 'res.config.settings' record to apply fiscal localization
             $updateSettings = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'write', [
@@ -832,7 +815,7 @@
                 ],
             ]);
             $response = [ 'status' => 'success', 'settings_updated' => $updateSettings];
-            echo json_encode($response, JSON_PRETTY_PRINT);
+            // echo json_encode($response, JSON_PRETTY_PRINT);
 
             // Update the company's chart template
             // echo ' compID: '.$newCompanyId;
@@ -844,7 +827,7 @@
             // Apply fiscal localization and load chart of accounts
             $localizationApplied = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'execute', [$configSettingsId]);
             $response = ['status' => 'success', 'localization_applied' => $localizationApplied];
-            echo json_encode($response, JSON_PRETTY_PRINT);
+            // echo json_encode($response, JSON_PRETTY_PRINT);
             
             // $updatedSettings = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'execute', [$configSettingsId]);
             // $response = [ 'status' => 'success', 'is_exe' => $updatedSettings];
@@ -857,25 +840,25 @@
         $postData = file_get_contents('php://input');
         $invoiceInfo = json_decode($postData, true);
 
-        //posted fields
-       $invoiceNumber = $invoiceInfo['name'] ?? false;
-       $customer_uuid = $invoiceInfo['customer_id'];
-       $company_uuid = $invoiceInfo['company_id'];
-       $invoiceDate = $invoiceInfo['invoice_date'];
-       $invoiceDateDue = $invoiceInfo['invoice_date_due'];
-       $currency = $invoiceInfo['currency'];
-       $paymentTerm = $invoiceInfo['payment_term'];
-       $invoiceLines = $invoiceInfo['invoice_lines'];
-        //connect to odoo
-       include('include/connection/odoo_db.php');
-       require_once('include/ripcord/ripcord.php');
-       $common = ripcord::client("$url/xmlrpc/2/common");
-       $uid = $common->authenticate($db, $username, $password, array());
+            //posted fields
+        $invoiceNumber = $invoiceInfo['name'] ?? false;
+        $customer_uuid = $invoiceInfo['customer_id'];
+        $company_uuid = $invoiceInfo['company_id'];
+        $invoiceDate = $invoiceInfo['invoice_date'];
+        $invoiceDateDue = $invoiceInfo['invoice_date_due'];
+        $currency = $invoiceInfo['currency'];
+        $paymentTerm = $invoiceInfo['payment_term'] ?? false;
+        $invoiceLines = $invoiceInfo['invoice_lines'];
+            //connect to odoo
+        include('include/connection/odoo_db.php');
+        require_once('include/ripcord/ripcord.php');
+        $common = ripcord::client("$url/xmlrpc/2/common");
+        $uid = $common->authenticate($db, $username, $password, array());
 
-       if ($uid)
-           echo 'Autheniticated';
-       else
-           echo 'Not authenticated';
+        //    if ($uid)
+        //        echo 'Autheniticated';
+        //    else
+        //        echo 'Not authenticated';
        
         //load odoo models
        $models = ripcord::client("$url/xmlrpc/2/object");
@@ -885,25 +868,25 @@
        // Fetch company id based on VM UUID
        $partnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'search', [[['x_uuid', '=', $customer_uuid]]]);
        $partnerId = $partnerId[0] ?? false;
-       echo 'PARTID:'.$partnerId;
+        //    echo 'PARTID:'.$partnerId;
 
 
        // Fetch company id based on VM UUID
        $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $company_uuid]]]);
        $companyId = $companyId[0] ?? false;
-       echo 'COMP:'.($companyId);
+        //    echo 'COMP:'.($companyId);
 
 
         // Fetch account id based on VM UUID
         $accountId = $models->execute_kw($db, $uid, $password, 'account.account', 'search', [[['name', '=', 'Product Sales'], ['company_id', '=', intval($companyId)]]]);
         $accountId = $accountId[0] ?? false;
-        echo 'ACID:'.($accountId);
+        // echo 'ACID:'.($accountId);
         
         // exit;
        //create invoice with associated partner_id/customer
        $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'create', [['move_type' => 'out_invoice', 'partner_id' => $partnerId, 'company_id' => intval($companyId)]]); 
        $response = [ 'status' => 'success', 'id_created' => $invoiceId ];
-        echo json_encode($response);
+        // echo json_encode($response);
 
         //if ID is created 
         if (is_int($invoiceId)) {
@@ -921,7 +904,7 @@
 
                 if($line['tax']){
                     $tax =  $models->execute_kw($db, $uid, $password, 'account.tax', 'search', [[['type_tax_use', '=', 'sale'], ['company_id', '=', intval($companyId)]]]);
-                    echo('TAXID:'.$tax[0]);
+                    // echo('TAXID:'.$tax[0]);
                 }
 
                 $invoiceLineIds[] = [0, false, [
@@ -937,7 +920,7 @@
             $invoiceData = [
                 'name' => $invoiceNumber,
                 'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format) //default to today's date if not set
-                //   'invoice_date_due' =>  $invoiceDateDue,
+                'invoice_date_due' =>  $invoiceDateDue,
                 'company_id' => intval($companyId), // Company associated with the invoice
                 'company_currency_id' => $currencyId,
                 'currency_id' => $currencyId, // Currency used in the invoice
@@ -948,7 +931,7 @@
             $newInvoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$invoiceId],$invoiceData]);
     
             $response = [ 'status' => 'success', 'is_updated' => $newInvoiceId ];
-            echo json_encode($response);
+            // echo json_encode($response);
             
             //POST drafted invoice if information provided is valid
             if ($newInvoiceId) {
@@ -972,10 +955,10 @@
     $uid = $common->authenticate($db, $username, $password, array());
     
 
-    if ($uid)
-        echo 'Autheniticated';
-    else
-        echo 'Not authenticated';
+    // if ($uid)
+    //     echo 'Autheniticated';
+    // else
+    //     echo 'Not authenticated';
     
 
     $models = ripcord::client("$url/xmlrpc/2/object"); 
@@ -1007,7 +990,7 @@
       $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['payment_reference', '=', $invoiceNum]]], );
       $invoiceId = $invoiceId[0] ?? false;
       
-      echo ('inoviceId '. $invoiceId );
+    //   echo ('inoviceId '. $invoiceId );
       // exit;
      
       $context = [
@@ -1026,7 +1009,7 @@
       ];
       $paymentRegisterId = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'create', [$paymentRegisterData], ['context' => $context]);
       $response = ['status' => 'success', 'payment_created' => $paymentRegisterId,];
-      echo json_encode($response);
+    //   echo json_encode($response);
       
       // Create the payments based on the payment register
       if (is_int($paymentRegisterId)) {
@@ -1045,10 +1028,10 @@
         $uid = $common->authenticate($db, $username, $password, array());
         
 
-        if ($uid)
-            echo 'Autheniticated';
-        else
-            echo 'Not authenticated';
+        // if ($uid)
+        //     echo 'Autheniticated';
+        // else
+        //     echo 'Not authenticated';
         
 
         $models = ripcord::client("$url/xmlrpc/2/object"); 
@@ -1103,11 +1086,11 @@
        $uid = $common->authenticate($db, $username, $password, array());
        
 
-       if ($uid) {
-           echo 'Autheniticated';
-       } else {
-           echo 'Not authenticated';
-       }
+        //    if ($uid) {
+        //        echo 'Autheniticated';
+        //    } else {
+        //        echo 'Not authenticated';
+        //    }
 
        $models = ripcord::client("$url/xmlrpc/2/object");
 
@@ -1178,11 +1161,11 @@
        $uid = $common->authenticate($db, $username, $password, array());
        
 
-       if ($uid) {
-           echo 'Autheniticated';
-       } else {
-           echo 'Not authenticated';
-       }
+        //    if ($uid) {
+        //        echo 'Autheniticated';
+        //    } else {
+        //        echo 'Not authenticated';
+        //    }
 
        $models = ripcord::client("$url/xmlrpc/2/object");
 
@@ -1191,7 +1174,7 @@
 
        $partnerData = $models->execute_kw($db, $uid, $password, 'res.partner', 'read', [$partnerId], ['fields' => ['company_id']]);
         $companyId = $partnerData[0]['company_id'][0];
-        $companyId = json_encode($companyId);
+        // $companyId = json_encode($companyId);
        
         $accountId = $models->execute_kw($db, $uid, $password, 'account.account', 'search', [[['name', '=', 'Expenses'], ['company_id', '=', $companyId]]]);
         $accountId = $accountId[0] ?? false;
@@ -1204,7 +1187,7 @@
         //create invoice with associated partner_id/customer
         $billId = $models->execute_kw($db, $uid, $password, 'account.move', 'create', [['move_type' => 'in_invoice', 'partner_id' => $partnerId, 'journal_id' => $journalId]]); 
         $response = [ 'status' => 'success', 'id_created' => $billId ];
-        echo json_encode($response);
+        // echo json_encode($response);
 
        /***** BILL ******/
        if (is_int($billId)) {
@@ -1247,7 +1230,7 @@
             $newBillId = $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$billId],$billData]);
     
             $response = [ 'status' => 'success', 'is_updated' => $newBillId ];
-            echo json_encode($response);
+            // echo json_encode($response);
             
             //POST drafted bill if information provided is valid
             if ($newBillId) {
@@ -1287,11 +1270,11 @@
 
         //authenicate user
         $uid = $common->authenticate($db, $username, $password, array());
-        if ($uid) {
-            echo 'Autheniticated';
-        } else {
-            echo 'Not authenticated';
-        }
+            // if ($uid) {
+            //     echo 'Autheniticated';
+            // } else {
+            //     echo 'Not authenticated';
+            // }
 
         //connect to odoo models
         $models = ripcord::client("$url/xmlrpc/2/object");
