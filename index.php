@@ -1,5 +1,6 @@
 <?php
-
+    header('Content-Type: application/json; charset=UTF-8');
+    
     include 'include/connection/mysql_db.php';
 
     function generateCode($string, $endDigit) {
