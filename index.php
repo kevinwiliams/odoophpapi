@@ -2,7 +2,7 @@
 
     header('Content-Type: application/json; charset=UTF-8');
 
-    include 'functions.php';
+    include 'include/functions.php';
 
     // API endpoint to retrieve data
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
@@ -37,7 +37,7 @@
         join users us on pr.user_id = us.id
         join stratas s on u.strata_id = s.id
         join addresses a on u.address_id = a.id
-        join parishes p on a.parish_id = p.id";
+        join parishes p on a.parish_id = p.id where u.id > 15";
 
         $queryInvoices = "select s.uuid company_id, inv.uuid inv_uuid, inv.invoice_number, inv.invoice_date, inv.due_date, i.uuid item_uuid, id.quantity, id.unit_cost_in_cents unit_cost, id.tax_rate, u.uuid customer_id from invoices inv
         join units u on inv.unit_id = u.id
@@ -45,7 +45,7 @@
         join invoice_details id on id.invoice_id = inv.id
         join items i on i.id = id.item_id where inv.id > 160 and inv.id < 166 ";
 
-        $result = mysqli_query($connection, $queryContacts);
+        $result = mysqli_query($connection, $queryUnits);
     
         // Check if the query execution was successful
         if (!$result) {

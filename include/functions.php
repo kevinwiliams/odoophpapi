@@ -833,7 +833,7 @@
                 //posted fields
                 $uuid = $item['uuid'];
                 $name = $item['name'];
-                $title = ucfirst($item['title']);
+                // $title = ucfirst($item['title']);
                 $email = $item['email'];
                 $street = $item['street'];
                 $city = $item['city'];
