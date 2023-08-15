@@ -29,7 +29,7 @@
                                 join role_types rt on rt.id = ur.role_type_id
                                 join stratas s on s.id = ur.strata_id
                                 join addresses a on a.id = s.address_id
-                                where ur.is_active = 1 and u.id > 2";
+                                where ur.is_active = 1";
                     break;
                 
                 case 'companies':
@@ -58,7 +58,13 @@
                                 join parishes p on a.parish_id = p.id";
                     break;
                     default:
-                    # code...
+                    $query =    "select u.uuid, concat(u.first_name, ' ', u.last_name) name, u.email, u.contact_number phone, rt.key title, ur.is_active, s.uuid company_uuid, ur.strata_id company_id, s.strata_name, s.email_address, a.* 
+                                from user_roles ur
+                                join users u on u.id = ur.user_id
+                                join role_types rt on rt.id = ur.role_type_id
+                                join stratas s on s.id = ur.strata_id
+                                join addresses a on a.id = s.address_id
+                                where ur.is_active = 1";
                     break;
             }
 
