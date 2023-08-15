@@ -749,7 +749,6 @@
         if ($response === null && json_last_error() !== JSON_ERROR_NONE) {
             echo 'Error decoding JSON: ' . json_last_error_msg();
         } else {
-            echo "inside";
             // Decode the JSON response into an associative array
             $data = json_decode($response, true);
           
@@ -898,7 +897,6 @@
         if ($response === null && json_last_error() !== JSON_ERROR_NONE) {
             echo 'Error decoding JSON: ' . json_last_error_msg();
         } else {
-            echo "inside";
             // Decode the JSON response into an associative array
             $dataset = json_decode($response, true);
 
@@ -1002,7 +1000,6 @@
         if ($response === null && json_last_error() !== JSON_ERROR_NONE) {
             echo 'Error decoding JSON: ' . json_last_error_msg();
         } else {
-            echo "inside";
             // Decode the JSON response into an associative array
             $data = json_decode($response, true);
           
@@ -1083,7 +1080,6 @@
         if ($response === null && json_last_error() !== JSON_ERROR_NONE) {
             echo 'Error decoding JSON: ' . json_last_error_msg();
         } else {
-            echo "inside";
             // Decode the JSON response into an associative array
             $data = json_decode($response, true);
           
