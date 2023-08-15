@@ -1117,3 +1117,222 @@
 
         } 
     }
+
+    // TODO: Function to load all payments to invoices
+    function loadPayments($apiUrl){
+        try {
+
+            include('include/connection/odoo_db.php');
+            require_once('include/ripcord/ripcord.php');
+            $common = ripcord::client("$url/xmlrpc/2/common");
+            $uid = $common->authenticate($db, $username, $password, array());
+            // if ($uid)
+            //     echo 'Autheniticated';
+            // else
+            //     echo 'Not authenticated';
+            
+        
+            $models = ripcord::client("$url/xmlrpc/2/object"); 
+            $arrContextOptions = array(
+                "ssl" => array(
+                "verify_peer" => false,
+                "verify_peer_name" => false,
+                )
+            );
+            $context = stream_context_create($arrContextOptions);
+            $response = file_get_contents("$apiUrl?e=vendors", false, $context);
+            
+            if ($response === null && json_last_error() !== JSON_ERROR_NONE) {
+                echo 'Error decoding JSON: ' . json_last_error_msg();
+            } else {
+
+                // Decode the JSON response into an associative array
+                $data = json_decode($response, true);
+            
+                // Process the data as needed
+                foreach ($data as $item) {
+                    //posted fields
+                    $customerId = $item['customer_id'];
+                    $paymentDate = $item['payment_date'];
+                    $amount = $item['amount'];
+                    $paymentMethodId = $item['payment_method'];
+                    $journalId = $item['journalId'] ?? 8;
+                    $invoiceNumber = $item['invoice_num'];
+            
+                    $partnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'search', [[['x_uuid', '=', $customerId]]]);
+                    $partnerId = $partnerId[0] ?? false;
+            
+                    $partnerData = $models->execute_kw($db, $uid, $password, 'res.partner', 'read', [$partnerId], ['fields' => ['company_id']]);
+                    $companyId = $partnerData[0]['company_id'][0];
+                    $companyId = json_encode($companyId);
+                    //   echo ($companyId);
+                    
+                    $journalId = $models->execute_kw($db, $uid, $password, 'account.journal', 'search', [[['code', '=', 'BNK1'], ['company_id', '=', intval($companyId)]]]);
+                    $journalId = json_encode($journalId[0]);
+                
+                    // Fetch invoice ID based on invoice number (e.g., 'INV/2023/00055')
+                    $invoiceNum = $invoiceNumber;
+                    $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['payment_reference', '=', $invoiceNum]]], );
+                    $invoiceId = $invoiceId[0] ?? false;
+                    
+                    $context = [
+                        'active_model' => 'account.move',
+                        'active_ids' => $invoiceId,
+                    ];
+                    
+                    // Create the payment register record
+                    $paymentRegisterData = [
+                        //   'company_id' => $companyId, // ID of the company associated
+                        'partner_id' => $partnerId, // ID of the customer or partner
+                        'payment_date' => $paymentDate, // Date of the payment (YYYY-MM-DD format)
+                        'journal_id' => intval($journalId),
+                        'payment_method_line_id' => $paymentMethodId,
+                        'amount' => $amount/100, // Amount of the payment
+                    ];
+                    $paymentRegisterId = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'create', [$paymentRegisterData], ['context' => $context]);
+                    $response = ['status' => 'success', 'payment_created' => $paymentRegisterId,];
+                    //   echo json_encode($response);
+                    
+                    // Create the payments based on the payment register
+                    if (is_int($paymentRegisterId)) {
+                        $regPayment = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'action_create_payments', [$paymentRegisterId]);
+                        $response = ['status' => 'success', 'payment_registered' => $regPayment,];
+                        return $response;
+                    }
+                }
+
+            }
+           
+            
+        } catch (Exception $e) {
+            // Output the error
+            header('Content-Type: application/json', true, 500);
+            echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+        }
+    }
+
+    // TODO: Function to load all expenses
+    function loadExpenses($apiUrl){
+        try {
+
+            include('include/connection/odoo_db.php');
+            require_once('include/ripcord/ripcord.php');
+            $common = ripcord::client("$url/xmlrpc/2/common");
+            $uid = $common->authenticate($db, $username, $password, array());
+            // if ($uid)
+            //     echo 'Autheniticated';
+            // else
+            //     echo 'Not authenticated';
+            
+        
+            $models = ripcord::client("$url/xmlrpc/2/object"); 
+            $arrContextOptions = array(
+                "ssl" => array(
+                "verify_peer" => false,
+                "verify_peer_name" => false,
+                )
+            );
+            $context = stream_context_create($arrContextOptions);
+            $response = file_get_contents("$apiUrl?e=vendors", false, $context);
+            
+            if ($response === null && json_last_error() !== JSON_ERROR_NONE) {
+                echo 'Error decoding JSON: ' . json_last_error_msg();
+            } else {
+
+                // Decode the JSON response into an associative array
+                $data = json_decode($response, true);
+            
+                // Process the data as needed
+                foreach ($data as $item) {
+                    //posted fields
+                    $customerId = $item['customer_id'];
+                    $invoiceDate = $item['bill_date'];
+                    $accountId = $item['accountId'] ?? 26;
+                    $invoiceNumber = $item['reference'];
+                    $paymentTerm = $item['payment_term'];
+                    $currency = $item['currency'];
+                    $invoiceLines = $item['invoice_lines'];
+
+                    $partnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'search', [[['x_uuid', '=', $customerId]]]);
+                    $partnerId = $partnerId[0] ?? false;
+
+                    $partnerData = $models->execute_kw($db, $uid, $password, 'res.partner', 'read', [$partnerId], ['fields' => ['company_id']]);
+                    $companyId = $partnerData[0]['company_id'][0];
+                    // $companyId = json_encode($companyId);
+                
+                    $accountId = $models->execute_kw($db, $uid, $password, 'account.account', 'search', [[['name', '=', 'Expenses'], ['company_id', '=', $companyId]]]);
+                    $accountId = $accountId[0] ?? false;
+
+
+                    $journalId = $models->execute_kw($db, $uid, $password, 'account.journal', 'search', [[['code', '=', 'BILL'], ['company_id', '=', intval($companyId)]]]);
+                    $journalId = $journalId[0] ?? false;
+                    // echo ($journalId);
+                    // exit;
+                    //create invoice with associated partner_id/customer
+                    $billId = $models->execute_kw($db, $uid, $password, 'account.move', 'create', [['move_type' => 'in_invoice', 'partner_id' => $partnerId, 'journal_id' => $journalId]]); 
+                    $response = [ 'status' => 'success', 'id_created' => $billId ];
+                    // echo json_encode($response);
+
+                    /***** BILL ******/
+                    if (is_int($billId)) {
+
+                            // Fetch currency id based on name (e.g., 'USD')
+                            $currencyId = $models->execute_kw($db, $uid, $password, 'res.currency', 'search', [[['name', '=', $currency]]]);
+                            $currencyId = $currencyId[0] ?? false;
+
+                            $accountId = $models->execute_kw($db, $uid, $password, 'account.account', 'search', [[['name', '=', 'Expenses'], ['company_id', '=', intval($companyId)]]]);
+                            $accountId = $accountId[0] ?? false;
+                            // echo $accountId;
+                            // exit;
+                            //invoice lines
+                            $invoiceLineIds = [];
+                            foreach ($invoiceLines as $line) {
+                                // Fetch currency id based on name (e.g., 'USD')
+                                $productId = $models->execute_kw($db, $uid, $password, 'product.product', 'search', [[['x_uuid', '=', $line['product_id']]]]);
+                                $productId = $productId[0] ?? false;
+
+                                $invoiceLineIds[] = [0, false, [
+                                    'product_id' => $productId,
+                                    'name' => $line['name'] ?? false,
+                                    'quantity' => $line['quantity'],
+                                    'price_unit' => $line['price'] ?? false,
+                                    'account_id' => $accountId,
+                                ]];
+                            }
+
+                            $billData = [
+                                // 'name' => 'BILL/2023/06/0022',
+                                //'partner_id' => $partnerId, // ID of the customer or partner
+                                'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format)
+                                'invoice_payment_term_id' => $paymentTerm,
+                                'currency_id' => $currencyId,
+                                'ref' => $invoiceNumber,
+                                'invoice_line_ids' => $invoiceLineIds,
+                            ];
+
+                            //update created bill with journal details
+                            $newBillId = $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$billId],$billData]);
+
+                            $response = [ 'status' => 'success', 'is_updated' => $newBillId ];
+                            // echo json_encode($response);
+                            
+                            //POST drafted bill if information provided is valid
+                            if ($newBillId) {
+                                $postedBill = $models->execute_kw($db, $uid, $password, 'account.move', 'action_post', [$billId]);
+
+                                $response = [ 'status' => 'success', 'bill' => $postedBill ];
+                                return $response;
+                            }
+                    
+                    }
+                }
+
+            }
+           
+            
+        } catch (Exception $e) {
+            // Output the error
+            header('Content-Type: application/json', true, 500);
+            echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+        }
+    }

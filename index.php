@@ -176,6 +176,14 @@
                     loadVendors($apiUrl);
                     break;
 
+                case 'loadpayments':
+                    loadPayments($apiUrl);
+                    break;
+
+                case 'loadexpenses':
+                    loadExpenses($apiUrl);
+                    break;
+
                 default:
                     header('Content-Type: application/json', true, 404);
                     echo json_encode(['status' => 'error', 'message' => 'Invalid endpoint'], JSON_PRETTY_PRINT);
