@@ -1,8 +1,5 @@
 <?php
 
-    $apiUrl = 'https://odoophpapi.test/';
-    // $apiUrl = 'https://paperless.vminnovations.dev/pm-api/';
-
     // Function to generate maintenance code
     function generateCode($string, $endDigit) {
         // Extract the first two characters of the string
@@ -599,7 +596,7 @@
     }
 
     // Function to load all companies to odoo
-    function loadCompanies() {
+    function loadCompanies($apiUrl) {
 
         include_once('include/connection/odoo_db.php');
         require_once('include/ripcord/ripcord.php');
@@ -623,7 +620,7 @@
             )
         );
         $context = stream_context_create($arrContextOptions);
-        $response = file_get_contents($apiUrl.'?e=companies', false, $context);
+        $response = file_get_contents("$apiUrl?e=companies", false, $context);
 
         // Process the API response
         if ($response === null && json_last_error() !== JSON_ERROR_NONE) {
@@ -718,7 +715,7 @@
     }
 
     // Function to load all contacts to odoo
-    function loadContacts() {
+    function loadContacts($apiUrl) {
 
         include_once('include/connection/odoo_db.php');
         require_once('include/ripcord/ripcord.php');
@@ -744,7 +741,7 @@
             )
         );
         $context = stream_context_create($arrContextOptions);
-        $response = file_get_contents($apiUrl.'?e=contacts', false, $context);
+        $response = file_get_contents("$apiUrl?e=contacts", false, $context);
 
         //echo $response;
 
@@ -793,7 +790,7 @@
     }
 
     // Function to load all units as contacts to odoo
-    function loadUnits() {
+    function loadUnits($apiUrl) {
 
         include_once('include/connection/odoo_db.php');
         require_once('include/ripcord/ripcord.php');
@@ -819,7 +816,7 @@
             )
         );
         $context = stream_context_create($arrContextOptions);
-        $response = file_get_contents($apiUrl.'?e=units', false, $context);
+        $response = file_get_contents("$apiUrl?e=units", false, $context);
 
         //echo $response;
 
@@ -827,7 +824,6 @@
         if ($response === null && json_last_error() !== JSON_ERROR_NONE) {
             echo 'Error decoding JSON: ' . json_last_error_msg();
         } else {
-            echo "inside";
             // Decode the JSON response into an associative array
             $data = json_decode($response, true);
           
@@ -872,7 +868,7 @@
     }
 
     // Function to load all existing invoices to odoo
-    function loadInvoices() {
+    function loadInvoices($apiUrl) {
 
         include_once('include/connection/odoo_db.php');
         require_once('include/ripcord/ripcord.php');
@@ -896,7 +892,7 @@
             )
         );
         $context = stream_context_create($arrContextOptions);
-        $response = file_get_contents($apiUrl.'?e=invoices', false, $context);
+        $response = file_get_contents("$apiUrl?e=invoices", false, $context);
 
         // Process the API response
         if ($response === null && json_last_error() !== JSON_ERROR_NONE) {
@@ -973,7 +969,7 @@
     }
 
     // Function to load all existing products to odoo
-    function loadProducts() {
+    function loadProducts($apiUrl) {
         include_once('include/connection/odoo_db.php');
         require_once('include/ripcord/ripcord.php');
 
@@ -998,7 +994,7 @@
             )
         );
         $context = stream_context_create($arrContextOptions);
-        $response = file_get_contents($apiUrl.'?e=products', false, $context);
+        $response = file_get_contents("$apiUrl?e=products", false, $context);
 
         //echo $response;
 
@@ -1046,6 +1042,80 @@
         
                 $response = [ 'status' => 'success', 'id_created' => $newProductId];
                 echo json_encode($response, JSON_PRETTY_PRINT);
+
+            }
+
+        } 
+    }
+
+    // Function to load all vendors to odoo
+    function loadVendors($apiUrl) {
+
+        include_once('include/connection/odoo_db.php');
+        require_once('include/ripcord/ripcord.php');
+
+        $common = ripcord::client("$url/xmlrpc/2/common");
+        $listing = $common->version();
+        // echo (json_encode($listing, JSON_PRETTY_PRINT));
+
+        //authenicate user
+        $uid = $common->authenticate($db, $username, $password, array());
+        // if ($uid) {
+        //     echo 'Autheniticated';
+        // } else {
+        //     echo 'Not authenticated';
+        // }
+
+        //connect to odoo models
+        $models = ripcord::client("$url/xmlrpc/2/object");
+        $arrContextOptions = array(
+            "ssl" => array(
+            "verify_peer" => false,
+            "verify_peer_name" => false,
+            )
+        );
+        $context = stream_context_create($arrContextOptions);
+        $response = file_get_contents("$apiUrl?e=vendors", false, $context);
+
+        //echo $response;
+
+        // Process the API response
+        if ($response === null && json_last_error() !== JSON_ERROR_NONE) {
+            echo 'Error decoding JSON: ' . json_last_error_msg();
+        } else {
+            echo "inside";
+            // Decode the JSON response into an associative array
+            $data = json_decode($response, true);
+          
+            // Process the data as needed
+           foreach ($data as $item) {
+            //posted fields
+            $uuid = $item['uuid'];
+            $name = $item['name'];
+            $email = $item['email_address'];
+            $phone = $item['contact_number'] ?? '';
+            $company = $item['company_uuid'];
+
+            // Fetch company id based on VM UUID
+            $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $company]]]);
+            $companyId = $companyId[0] ?? false;
+
+            $itemData = 
+                    [[
+                        'x_uuid' => $uuid,
+                        'name' => $name,
+                        // 'title' => $title,
+                        'phone'  => $phone, //area code required
+                        'email'  => $email,
+                        'company_id' => intval($companyId),
+                        'is_company' => true
+                    ]];
+            
+            // echo json_encode($itemData, JSON_PRETTY_PRINT);
+
+            $new_id = $models->execute_kw($db, $uid, $password, 'res.partner', 'create', $itemData); 
+            $response = [ 'status' => 'success', 'id_created' => $new_id];
+            echo json_encode($response, JSON_PRETTY_PRINT);
 
             }
 

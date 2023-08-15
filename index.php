@@ -2,6 +2,9 @@
 
     header('Content-Type: application/json; charset=UTF-8');
 
+    // $apiUrl = 'https://odoophpapi.test/';
+    $apiUrl = 'https://paperless.vminnovations.dev/pm-api/';
+
     include 'include/functions.php';
 
     // API endpoint to retrieve data
@@ -57,7 +60,12 @@
                                 join addresses a on u.address_id = a.id
                                 join parishes p on a.parish_id = p.id";
                     break;
-                    default:
+                case 'vendors':
+                    $query =    "select v.*, s.uuid company_uuid from vendors v
+                                join stratas s on s.id = v.strata_id
+                                where v.is_active = 1";
+                    break;
+                default:
                     $query =    "select u.uuid, concat(u.first_name, ' ', u.last_name) name, u.email, u.contact_number phone, rt.key title, ur.is_active, s.uuid company_uuid, ur.strata_id company_id, s.strata_name, s.email_address, a.* 
                                 from user_roles ur
                                 join users u on u.id = ur.user_id
@@ -146,23 +154,26 @@
                     break;
                 
                 case 'loadcompanies':
-                    loadCompanies();
+                    loadCompanies($apiUrl);
                     break;
                 
                 case 'loadcontacts':
-                    loadContacts();
+                    loadContacts($apiUrl);
                     break;
                 
                 case 'loadunits':
-                    loadUnits();
+                    loadUnits($apiUrl);
                     break;
                 
                 case 'loadinvoices':
-                    loadInvoices();
+                    loadInvoices($apiUrl);
                     break;
 
                 case 'loadproducts':
-                    loadProducts();
+                    loadProducts($apiUrl);
+                    break;
+                case 'loadvendors':
+                    loadVendors($apiUrl);
                     break;
 
                 default:
