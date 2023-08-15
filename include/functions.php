@@ -1,5 +1,8 @@
 <?php
 
+    $apiUrl = 'https://odoophpapi.test/';
+    // $apiUrl = 'https://paperless.vminnovations.dev/pm-api/';
+
     // Function to generate maintenance code
     function generateCode($string, $endDigit) {
         // Extract the first two characters of the string
@@ -620,7 +623,7 @@
             )
         );
         $context = stream_context_create($arrContextOptions);
-        $response = file_get_contents('https://odoophpapi.test/', false, $context);
+        $response = file_get_contents($apiUrl.'?e=companies', false, $context);
 
         // Process the API response
         if ($response === null && json_last_error() !== JSON_ERROR_NONE) {
@@ -741,7 +744,7 @@
             )
         );
         $context = stream_context_create($arrContextOptions);
-        $response = file_get_contents('https://odoophpapi.test/', false, $context);
+        $response = file_get_contents($apiUrl.'?e=contacts', false, $context);
 
         //echo $response;
 
@@ -816,7 +819,7 @@
             )
         );
         $context = stream_context_create($arrContextOptions);
-        $response = file_get_contents('https://odoophpapi.test/', false, $context);
+        $response = file_get_contents($apiUrl.'?e=units', false, $context);
 
         //echo $response;
 
@@ -893,7 +896,7 @@
             )
         );
         $context = stream_context_create($arrContextOptions);
-        $response = file_get_contents('https://odoophpapi.test/', false, $context);
+        $response = file_get_contents($apiUrl.'?e=invoices', false, $context);
 
         // Process the API response
         if ($response === null && json_last_error() !== JSON_ERROR_NONE) {
@@ -995,7 +998,7 @@
             )
         );
         $context = stream_context_create($arrContextOptions);
-        $response = file_get_contents('https://odoophpapi.test/', false, $context);
+        $response = file_get_contents($apiUrl.'?e=products', false, $context);
 
         //echo $response;
 

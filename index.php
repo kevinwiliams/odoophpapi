@@ -5,7 +5,7 @@
     include 'include/functions.php';
 
     // API endpoint to retrieve data
-    if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_REQUEST['e'])) {
 
         include 'include/connection/mysql_db.php';
         
@@ -16,59 +16,79 @@
             echo "Failed to connect to the database.";
             exit;
         }
+
+        try {
+            
+            $endpoint = $_REQUEST['e'];
+
+            switch ($endpoint) {
+                case 'contacts':
+                    $query =    "select u.uuid, concat(u.first_name, ' ', u.last_name) name, u.email, u.contact_number phone, rt.key title, ur.is_active, s.uuid company_uuid, ur.strata_id company_id, s.strata_name, s.email_address, a.* 
+                                from user_roles ur
+                                join users u on u.id = ur.user_id
+                                join role_types rt on rt.id = ur.role_type_id
+                                join stratas s on s.id = ur.strata_id
+                                join addresses a on a.id = s.address_id
+                                where ur.is_active = 1 and u.id > 2";
+                    break;
+                
+                case 'companies':
+                    $query =    "select s.uuid, s.id, s.strata_name, s.email_address, s.contact_number, 'JM' country, 'JMD' currency, a.* from stratas s
+                                join addresses a on a.id = s.address_id";
+                    break;
+                
+                case 'products' :
+                    $query =    "select i.*, s.uuid company_id, 'service' type, '2' category from items i
+                                join stratas s on s.id = i.strata_id where i.is_active = 1";
+                    break;
+
+                case 'invoices':
+                    $query =    "select s.uuid company_id, inv.uuid inv_uuid, inv.invoice_number, inv.invoice_date, inv.due_date, i.uuid item_uuid, id.quantity, id.unit_cost_in_cents unit_cost, id.tax_rate, u.uuid customer_id from invoices inv
+                                join units u on inv.unit_id = u.id
+                                join stratas s on s.id = inv.strata_id
+                                join invoice_details id on id.invoice_id = inv.id
+                                join items i on i.id = id.item_id";
+                    break;
+                case 'units':
+                    $query =    "select u.uuid, concat(u.short_description, ' / Lot ' ,u.lot_number) name, s.uuid company_uuid, a.address_line_1 street, p.name city, pr.user_id, us.email, us.contact_number phone from units u
+                                join proprietors pr on pr.unit_id = u.id and pr.is_proxy = 1
+                                join users us on pr.user_id = us.id
+                                join stratas s on u.strata_id = s.id
+                                join addresses a on u.address_id = a.id
+                                join parishes p on a.parish_id = p.id";
+                    break;
+                    default:
+                    # code...
+                    break;
+            }
+
+            $result = mysqli_query($connection, $query);
     
-        // Query to fetch data from the database
-        $queryContacts = "select u.uuid, concat(u.first_name, ' ', u.last_name) name, u.email, u.contact_number phone, rt.key title, ur.is_active, s.uuid company_uuid, ur.strata_id company_id, s.strata_name, s.email_address, a.* 
-        from user_roles ur
-        join users u on u.id = ur.user_id
-        join role_types rt on rt.id = ur.role_type_id
-        join stratas s on s.id = ur.strata_id
-        join addresses a on a.id = s.address_id
-        where ur.is_active = 1 and u.id > 2";
-
-        $queryCompanies = "select s.uuid, s.id, s.strata_name, s.email_address, s.contact_number, 'JM' country, 'JMD' currency, a.* from stratas s
-        join addresses a on a.id = s.address_id";
-
-        $queryProducts = "select i.*, s.uuid company_id, 'service' type, '2' category from items i
-                        join stratas s on s.id = i.strata_id where i.is_active = 1";
-
-        $queryUnits = "select u.uuid, concat(u.short_description, ' / Lot ' ,u.lot_number) name, s.uuid company_uuid, a.address_line_1 street, p.name city, pr.user_id, us.email, us.contact_number phone from units u
-        join proprietors pr on pr.unit_id = u.id and pr.is_proxy = 1
-        join users us on pr.user_id = us.id
-        join stratas s on u.strata_id = s.id
-        join addresses a on u.address_id = a.id
-        join parishes p on a.parish_id = p.id where u.id > 15";
-
-        $queryInvoices = "select s.uuid company_id, inv.uuid inv_uuid, inv.invoice_number, inv.invoice_date, inv.due_date, i.uuid item_uuid, id.quantity, id.unit_cost_in_cents unit_cost, id.tax_rate, u.uuid customer_id from invoices inv
-        join units u on inv.unit_id = u.id
-        join stratas s on s.id = inv.strata_id
-        join invoice_details id on id.invoice_id = inv.id
-        join items i on i.id = id.item_id where inv.id > 160 and inv.id < 166 ";
-
-        $result = mysqli_query($connection, $queryUnits);
-    
-        // Check if the query execution was successful
-        if (!$result) {
-            echo "Query execution failed.";
-            exit;
-        }
-    
-        // Fetch the data from the result set
-        $data = mysqli_fetch_all($result, MYSQLI_ASSOC);
-    
-        // Set the response header and encode the data as JSON
-        header('Content-Type: application/json');
-        echo json_encode($data);
-
-
-        $flds = ($data);
+            // Check if the query execution was successful
+            if (!$result) {
+                echo "Query execution failed.";
+                exit;
+            }
+        
+            // Fetch the data from the result set
+            $data = mysqli_fetch_all($result, MYSQLI_ASSOC);
+        
+            // Set the response header and encode the data as JSON
+            header('Content-Type: application/json');
+            echo json_encode($data);
 
         
-    
-        // Close the database connection
-        mysqli_close($connection);
+            // Close the database connection
+            mysqli_close($connection);
 
-        exit;
+            exit;
+
+        } catch (Exception $e) {
+            // Output the error
+            header('Content-Type: application/json', true, 500);
+            echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+        }
+    
        
     }
 
