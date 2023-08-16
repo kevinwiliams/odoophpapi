@@ -50,7 +50,7 @@
                                 join units u on inv.unit_id = u.id
                                 join stratas s on s.id = inv.strata_id
                                 join invoice_details id on id.invoice_id = inv.id
-                                join items i on i.id = id.item_id";
+                                join items i on i.id = id.item_id where inv.id < 30";
                     break;
                 case 'units':
                     $query =    "select u.uuid, concat(u.short_description, ' / Lot ' ,u.lot_number) name, s.uuid company_uuid, a.address_line_1 street, p.name city, pr.user_id, us.email, us.contact_number phone from units u
@@ -64,6 +64,16 @@
                     $query =    "select v.*, s.uuid company_uuid from vendors v
                                 join stratas s on s.id = v.strata_id
                                 where v.is_active = 1";
+                    break;
+                case 'vendorproducts':
+                    $query =    "select v.uuid, v.name, s.uuid company_uuid,  'service' product_type, 3 'category', 100 price from vendors v
+                                join stratas s on s.id = v.strata_id";
+                    break;
+                case 'expenses':
+                    $query =    "select e.*, s.uuid company_uuid, ed.*, v.* from expenses e
+                                join vendors v on v.id = e.vendor_id
+                                join expense_details ed on ed.expense_id = e.id
+                                join stratas s on s.id = e.property_id";
                     break;
                 default:
                     $query =    "select u.uuid, concat(u.first_name, ' ', u.last_name) name, u.email, u.contact_number phone, rt.key title, ur.is_active, s.uuid company_uuid, ur.strata_id company_id, s.strata_name, s.email_address, a.* 

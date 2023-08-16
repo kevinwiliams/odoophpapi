@@ -30,7 +30,7 @@
         // Fetch account id based on VM UUID
         $accountId = $models->execute_kw($db, $uid, $password, 'account.account', 'search', [[['name', '=', 'Product Sales'], ['company_id', '=', intval($companyId)]]]);
         $accountId = $accountId[0] ?? false;
-        echo 'ACID:'.($accountId);
+        // echo 'ACID:'.($accountId);
 
         // Create the invoice lines
         foreach ($invoiceLines as $line) {
@@ -43,7 +43,7 @@
 
             if($line['tax_rate'] > 0){
                 $tax =  $models->execute_kw($db, $uid, $password, 'account.tax', 'search', [[['type_tax_use', '=', 'sale'], ['company_id', '=', intval($companyId)]]]);
-                echo('TAXID:'.$tax[0]);
+                // echo('TAXID:'.$tax[0]);
             }
 
             $invoiceLineIds[] = [0, false, [
@@ -1140,7 +1140,7 @@
                 )
             );
             $context = stream_context_create($arrContextOptions);
-            $response = file_get_contents("$apiUrl?e=vendors", false, $context);
+            $response = file_get_contents("$apiUrl?e=payments", false, $context);
             
             if ($response === null && json_last_error() !== JSON_ERROR_NONE) {
                 echo 'Error decoding JSON: ' . json_last_error_msg();
@@ -1233,7 +1233,7 @@
                 )
             );
             $context = stream_context_create($arrContextOptions);
-            $response = file_get_contents("$apiUrl?e=vendors", false, $context);
+            $response = file_get_contents("$apiUrl?e=expenses", false, $context);
             
             if ($response === null && json_last_error() !== JSON_ERROR_NONE) {
                 echo 'Error decoding JSON: ' . json_last_error_msg();
@@ -1335,4 +1335,83 @@
             header('Content-Type: application/json', true, 500);
             echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
         }
+    }
+
+    // Function to load all existing products to odoo
+    function loadVendorProducts($apiUrl) {
+        include_once('include/connection/odoo_db.php');
+        require_once('include/ripcord/ripcord.php');
+
+        $common = ripcord::client("$url/xmlrpc/2/common");
+        $listing = $common->version();
+        // echo (json_encode($listing, JSON_PRETTY_PRINT));
+
+        //authenicate user
+        $uid = $common->authenticate($db, $username, $password, array());
+        // if ($uid) {
+        //     echo 'Autheniticated';
+        // } else {
+        //     echo 'Not authenticated';
+        // }
+
+        //connect to odoo models
+        $models = ripcord::client("$url/xmlrpc/2/object");
+        $arrContextOptions = array(
+            "ssl" => array(
+            "verify_peer" => false,
+            "verify_peer_name" => false,
+            )
+        );
+        $context = stream_context_create($arrContextOptions);
+        $response = file_get_contents("$apiUrl?e=vendorproducts", false, $context);
+
+        //echo $response;
+
+        // Process the API response
+        if ($response === null && json_last_error() !== JSON_ERROR_NONE) {
+            echo 'Error decoding JSON: ' . json_last_error_msg();
+        } else {
+            // Decode the JSON response into an associative array
+            $data = json_decode($response, true);
+          
+            // Process the data as needed
+           foreach ($data as $item) {
+                //posted fields
+                $productName = $item['name'];
+                $productType = $item['product_type'];
+                $productCat = $item['category'];
+                $productPrice = $item['price'];
+                $productSalesTax = $item['sales_tax'] ?? false;
+                $productVendorTax = $item['vendor_tax'] ?? false;
+                $company_uuid = $item['company_uuid'];
+                $product_uuid = $item['uuid'];
+
+                // Fetch company id based on VM UUID
+                // Fetch company id based on VM UUID
+                $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $company_uuid]]]);
+                $companyId = $companyId[0] ?? false;
+
+                $productCode = generateCode($productName, $companyId);
+
+                $productData = [
+                    'x_uuid' => $product_uuid, // Name of the product
+                    'name' => $productName, // Name of the product
+                    'type' => $productType, // Type of the product (e.g., 'product', 'service')
+                    'list_price' => $productPrice / 100, // Sales price of the product
+                    'default_code' => $productCode, // Unique code or reference for the product
+                    'categ_id' => $productCat, // Category of the product (optional) - default - All
+                    'company_id' => $companyId, // Company associated with the product (optional); Admin user only can apply associated ID
+                    'taxes_id' => [], // Tax applied to product
+                    'supplier_taxes_id' => [] //Vender tax applied to product
+                    
+                ];
+
+                $newProductId = $models->execute_kw($db, $uid, $password, 'product.product', 'create', [$productData]);
+        
+                $response = [ 'status' => 'success', 'id_created' => $newProductId];
+                echo json_encode($response, JSON_PRETTY_PRINT);
+
+            }
+
+        } 
     }
