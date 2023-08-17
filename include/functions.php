@@ -1522,7 +1522,7 @@
             $partnerData = $models->execute_kw($db, $uid, $password, 'res.partner', 'read', [$partnerId], ['fields' => ['company_id']]);
             $companyId = $partnerData[0]['company_id'][0];
             $companyId = json_encode($companyId);
-              echo ($companyId);
+            //   echo ($companyId);
             
              $journalId = $models->execute_kw($db, $uid, $password, 'account.journal', 'search', [[['code', '=', 'BNK1'], ['company_id', '=', intval($companyId)]]]);
              $journalId = json_encode($journalId[0]);

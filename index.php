@@ -173,43 +173,6 @@
                     $response = invoicePayment($paymentInfo);
                     echo json_encode($response, JSON_PRETTY_PRINT);
                     break;
-                
-                case 'loadcompanies':
-                    loadCompanies($apiUrl);
-                    break;
-                
-                case 'loadcontacts':
-                    loadContacts($apiUrl);
-                    break;
-                
-                case 'loadunits':
-                    loadUnits($apiUrl);
-                    break;
-                
-                case 'loadinvoices':
-                    loadInvoices($apiUrl);
-                    break;
-
-                case 'loadproducts':
-                    loadProducts($apiUrl);
-                    break;
-                
-                case 'loadvendorproducts':
-                    loadVendorProducts($apiUrl);
-                    break;
-
-                case 'loadvendors':
-                    loadVendors($apiUrl);
-                    break;
-
-                case 'loadinvpayments':
-                    loadInvoicePayments($apiUrl);
-                    break;
-
-                case 'loadexpenses':
-                    loadExpenses($apiUrl);
-                    break;
-
                 case 'paymentmethod':
                     $postData = file_get_contents('php://input');
                     $paymentMethodData = json_decode($postData, true);
@@ -222,6 +185,45 @@
                     $response = createPaymentTerms($paymentTermsData);
                     echo json_encode($response, JSON_PRETTY_PRINT);
                     break;
+                case 'loadcompanies':
+                    loadCompanies($apiUrl);
+                    break;
+                
+                case 'loadcontacts':
+                    loadContacts($apiUrl);
+                    break;
+                
+                case 'loadunits':
+                    loadUnits($apiUrl);
+                    break;
+                
+                    case 'loadproducts':
+                        loadProducts($apiUrl);
+                        break;
+                    
+                    case 'loadvendorproducts':
+                        loadVendorProducts($apiUrl);
+                        break;
+                case 'loadinvoices':
+                    loadInvoices($apiUrl);
+                    break;
+
+                
+                case 'loadvendors':
+                    loadVendors($apiUrl);
+                    break;
+
+                case 'loadexpenses':
+                    loadExpenses($apiUrl);
+                    break;
+                    
+                case 'loadinvpayments':
+                    loadInvoicePayments($apiUrl);
+                    break;
+
+                
+
+                
                 default:
                     header('Content-Type: application/json', true, 404);
                     echo json_encode(['status' => 'error', 'message' => 'Invalid endpoint'], JSON_PRETTY_PRINT);
