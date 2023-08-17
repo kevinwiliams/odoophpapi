@@ -2,8 +2,8 @@
 
     header('Content-Type: application/json; charset=UTF-8');
 
-    $apiUrl = 'https://odoophpapi.test/';
-    // $apiUrl = 'https://paperless.vminnovations.dev/pm-api/';
+    // $apiUrl = 'https://odoophpapi.test/';
+    $apiUrl = 'https://paperless.vminnovations.dev/pm-api/';
 
     include 'include/functions.php';
 
@@ -84,7 +84,12 @@
                                 join stratas s on s.id = i.strata_id
                                 join units u on u.id = i.unit_id
                                 join payment_methods pm on pm.id = ip.payment_method_id 
-                                where ip.id = 1";
+                                where ip.id";
+                    break;
+                case 'expensepayments':
+                    $query =    "select ep.date_paid, ep.payment_method_id, ep.amount_in_cents amount, s.uuid unit_uuid, s.strata_name, e.expense_no invoice_number from expense_payments ep
+                                join expenses e on e.id = ep.expense_id
+                                join stratas s on s.id = e.property_id where e.id";
                     break;
                 default:
                     $query =    "select u.uuid, concat(u.first_name, ' ', u.last_name) name, u.email, u.contact_number phone, rt.key title, ur.is_active, s.uuid company_uuid, ur.strata_id company_id, s.strata_name, s.email_address, a.* 
@@ -220,8 +225,10 @@
                 case 'loadinvpayments':
                     loadInvoicePayments($apiUrl);
                     break;
-
-                
+                case 'loadexpayments':
+                    loadExpensePayments($apiUrl);
+                    break;
+            
 
                 
                 default:

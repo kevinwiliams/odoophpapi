@@ -1524,8 +1524,9 @@
             $companyId = json_encode($companyId);
             //   echo ($companyId);
             
-             $journalId = $models->execute_kw($db, $uid, $password, 'account.journal', 'search', [[['code', '=', 'BNK1'], ['company_id', '=', intval($companyId)]]]);
-             $journalId = json_encode($journalId[0]);
+            $getJournal = (intval($paymentMethodId) == 1) ? 'CSH1' : 'BNK1';
+            $journalId = $models->execute_kw($db, $uid, $password, 'account.journal', 'search', [[['code', '=', $getJournal], ['company_id', '=', intval($companyId)]]]);
+            $journalId = json_encode($journalId[0]);
         
               // Fetch invoice ID based on invoice number (e.g., 'INV/2023/00055')
               $invoiceNum = $invoiceNumber;
@@ -1558,6 +1559,107 @@
                   $regPayment = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'action_create_payments', [$paymentRegisterId]);
                   $response = ['status' => 'success', 'payment_registered' => $regPayment,];
                 return $response;
+              }
+
+            }
+
+        } 
+    }
+
+    // Function to load all bill payments to odoo
+    function loadExpensePayments($apiUrl) {
+
+        include_once('include/connection/odoo_db.php');
+        require_once('include/ripcord/ripcord.php');
+
+        $common = ripcord::client("$url/xmlrpc/2/common");
+        $listing = $common->version();
+        // echo (json_encode($listing, JSON_PRETTY_PRINT));
+
+        //authenicate user
+        $uid = $common->authenticate($db, $username, $password, array());
+        // if ($uid) {
+        //     echo 'Autheniticated';
+        // } else {
+        //     echo 'Not authenticated';
+        // }
+
+        //connect to odoo models
+        $models = ripcord::client("$url/xmlrpc/2/object");
+        $arrContextOptions = array(
+            "ssl" => array(
+            "verify_peer" => false,
+            "verify_peer_name" => false,
+            )
+        );
+        $context = stream_context_create($arrContextOptions);
+        $response = file_get_contents("$apiUrl?e=expensepayments", false, $context);
+
+        // echo $response;
+        // exit;
+        // Process the API response
+        if ($response === null && json_last_error() !== JSON_ERROR_NONE) {
+            echo 'Error decoding JSON: ' . json_last_error_msg();
+        } else {
+            // Decode the JSON response into an associative array
+            $data = json_decode($response, true);
+          
+            // Process the data as needed
+           foreach ($data as $item) {
+            //posted fields
+            $customerId = $item['unit_uuid'];
+            $paymentDate = $item['date_paid'];
+            $amount = $item['amount'];
+            $paymentMethodId = $item['payment_method_id'] ?? false;
+            $invoiceNumber = $item['invoice_number'];
+    
+            $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $customerId]]]);
+            $companyId = $companyId[0] ?? false;
+            // echo json_encode($companyId);
+            // exit;
+            // $partnerData = $models->execute_kw($db, $uid, $password, 'res.partner', 'read', [$companyId], ['fields' => ['id']]);
+            // // echo json_encode($partnerData);
+            // // exit;
+            // $partnerId = $partnerData[0]['id'];
+            // $partnerId = json_encode($partnerId);
+            //   echo ($partnerId);
+            //   exit;
+            
+            $getJournal = (intval($paymentMethodId) == 1) ? 'CSH1' : 'BNK1';
+            $journalId = $models->execute_kw($db, $uid, $password, 'account.journal', 'search', [[['code', '=', $getJournal], ['company_id', '=', intval($companyId)]]]);
+            $journalId = json_encode($journalId[0]);
+        
+              // Fetch invoice ID based on invoice number (e.g., 'INV/2023/00055')
+              $invoiceNum = $invoiceNumber;
+              $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['name', '=', $invoiceNum], ['company_id', '=', intval($companyId)]]], );
+              $invoiceId = $invoiceId[0] ?? false;
+              
+            //   echo ('inoviceId '. $invoiceId. 'CompanyId '. $companyId);
+            //   exit;
+             
+              $context = [
+                  'active_model' => 'account.move',
+                  'active_ids' => $invoiceId,
+              ];
+              
+              // Create the payment register record
+              $paymentRegisterData = [
+                //   'company_id' => $companyId, // ID of the company associated
+                  'partner_id' => $companyId, // ID of the customer or partner
+                  'payment_date' => $paymentDate, // Date of the payment (YYYY-MM-DD format)
+                  'journal_id' => intval($journalId),
+                  'payment_method_line_id' => $paymentMethodId,
+                  'amount' => $amount/100, // Amount of the payment
+              ];
+              $paymentRegisterId = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'create', [$paymentRegisterData], ['context' => $context]);
+              $response = ['status' => 'success', 'payment_created' => $paymentRegisterId,];
+              echo json_encode($response);
+              
+              // Create the payments based on the payment register
+              if (is_int($paymentRegisterId)) {
+                  $regPayment = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'action_create_payments', [$paymentRegisterId]);
+                  $response = ['status' => 'success', 'payment_registered' => $regPayment,];
+                  echo json_encode($response);
               }
 
             }
@@ -1614,48 +1716,44 @@
 
    // Function to create a payment terms
    function createPaymentTerms($paymentTermsData) {
-    try {
+        try {
 
-       // Extract invoice fields from the JSON data
-       $uuid = $paymentTermsData['uuid'];
-       $name = $paymentTermsData['name'];
-       $code = $paymentTermsData['note'];
-       $days = $paymentTermsData['days'];
+        // Extract invoice fields from the JSON data
+        $uuid = $paymentTermsData['uuid'];
+        $name = $paymentTermsData['name'];
+        $code = $paymentTermsData['note'];
+        $days = $paymentTermsData['days'];
 
-       include_once('include/connection/odoo_db.php');
-       require_once('include/ripcord/ripcord.php');
+        include_once('include/connection/odoo_db.php');
+        require_once('include/ripcord/ripcord.php');
 
-       $common = ripcord::client("$url/xmlrpc/2/common");
-       // authenicate user
-       $uid = $common->authenticate($db, $username, $password, array());
+        $common = ripcord::client("$url/xmlrpc/2/common");
+        // authenicate user
+        $uid = $common->authenticate($db, $username, $password, array());
 
-       // connect to odoo models
-       $models = ripcord::client("$url/xmlrpc/2/object");
+        // connect to odoo models
+        $models = ripcord::client("$url/xmlrpc/2/object");
 
-    //    // Fetch company id based on VM UUID
-    //    $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $company]]]);
-    //    $companyId = $companyId[0] ?? false;
+            $paymentTermsData = [
+                'name' => 'Net 30 Days', // Name of the payment terms
+                'active' => true, // Whether the payment terms are active
+                'note' => 'Payment due within 30 days', // Additional notes for the payment terms
+                'line_ids' => [
+                    // Numeric value to represent the days
+                    ['days' => 30, 'value' => 'balance']
+                ]
+            ];
 
-        $paymentTermsData = [
-            'name' => 'Net 30 Days', // Name of the payment terms
-            'active' => true, // Whether the payment terms are active
-            'note' => 'Payment due within 30 days', // Additional notes for the payment terms
-            'line_ids' => [
-                // Numeric value to represent the days
-                ['days' => 30, 'value' => 'balance']
-            ]
-        ];
+            // Create the payment terms
+            $newPaymentTermsId = $models->execute_kw($db, $uid, $password, 'account.payment.term', 'create', [$paymentTermsData]);
 
-        // Create the payment terms
-        $newPaymentTermsId = $models->execute_kw($db, $uid, $password, 'account.payment.term', 'create', [$paymentTermsData]);
+            $response = ['status' => 'success', 'id_created' => $newPaymentTermsId];
+            return $response;
 
-        $response = ['status' => 'success', 'id_created' => $newPaymentTermsId];
-        return $response;
-
-   } catch (Exception $e) {
-       // Output the error
-       header('Content-Type: application/json', true, 500);
-       echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+    } catch (Exception $e) {
+        // Output the error
+        header('Content-Type: application/json', true, 500);
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
    }
 
 }
