@@ -66,11 +66,11 @@
                                 where v.is_active = 1";
                     break;
                 case 'vendorproducts':
-                    $query =    "select v.uuid, v.name, s.uuid company_uuid,  'service' product_type, 3 'category', 100 price from vendors v
+                    $query =    "select v.uuid, v.description name, s.uuid company_uuid,  'service' product_type, 3 'category', 100 price from vendors v
                                 join stratas s on s.id = v.strata_id";
                     break;
                 case 'expenses':
-                    $query =    "select e.*, s.uuid company_uuid, ed.*, v.* from expenses e
+                    $query =    "select e.uuid inv_uuid, e.expense_no, e.expense_date, e.due_date, e.sub_total_in_cents price, s.uuid company_uuid, s.strata_name, ed.description, ed.quantity, ed.tax_rate, ed.sub_total_in_cents price, v.description label, v.uuid vendor_uuid  from expenses e
                                 join vendors v on v.id = e.vendor_id
                                 join expense_details ed on ed.expense_id = e.id
                                 join stratas s on s.id = e.property_id";
@@ -182,6 +182,11 @@
                 case 'loadproducts':
                     loadProducts($apiUrl);
                     break;
+                
+                case 'loadvendorproducts':
+                    loadVendorProducts($apiUrl);
+                    break;
+
                 case 'loadvendors':
                     loadVendors($apiUrl);
                     break;
