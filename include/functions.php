@@ -90,7 +90,7 @@
         return $invoiceId;
     }
 
-    // Function to create an invoice and its lines
+    // Function to create a bill and its lines
     function createExpenses($models, $uuid, $partnerId, $invoiceNumber, $invoiceDate, $invoiceDateDue, $invoiceLines, $connection)
     {
         $db = $connection['db'];
@@ -995,13 +995,13 @@
                     // Fetch company id based on VM UUID
                     $partnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'search', [[['x_uuid', '=', $row['customer_id']]]]);
                     $partnerId = $partnerId[0] ?? false;
-                    echo 'PARTID:'.$partnerId;
+                    // echo 'PARTID:'.$partnerId;
 
 
                     // Fetch company id based on VM UUID
                     $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $row['company_id']]]]);
                     $companyId = $companyId[0] ?? false;
-                    echo 'COMP:'.($companyId);
+                    // echo 'COMP:'.($companyId);
 
 
                     $groupedData[$invoiceId] = [
@@ -1356,7 +1356,7 @@
 
             }
             // echo json_encode($groupedData, JSON_PRETTY_PRINT);
-// exit;
+
             // Loop through each invoice group and create invoices
             foreach ($groupedData as $invoiceId => $invoiceData) {
                 // Extract companyId and partnerId for the current group
@@ -1468,3 +1468,194 @@
 
         } 
     }
+
+    // Function to load all invoice payments to odoo
+    function loadInvoicePayments($apiUrl) {
+
+        include_once('include/connection/odoo_db.php');
+        require_once('include/ripcord/ripcord.php');
+
+        $common = ripcord::client("$url/xmlrpc/2/common");
+        $listing = $common->version();
+        // echo (json_encode($listing, JSON_PRETTY_PRINT));
+
+        //authenicate user
+        $uid = $common->authenticate($db, $username, $password, array());
+        // if ($uid) {
+        //     echo 'Autheniticated';
+        // } else {
+        //     echo 'Not authenticated';
+        // }
+
+        //connect to odoo models
+        $models = ripcord::client("$url/xmlrpc/2/object");
+        $arrContextOptions = array(
+            "ssl" => array(
+            "verify_peer" => false,
+            "verify_peer_name" => false,
+            )
+        );
+        $context = stream_context_create($arrContextOptions);
+        $response = file_get_contents("$apiUrl?e=invoicepayments", false, $context);
+
+        //echo $response;
+
+        // Process the API response
+        if ($response === null && json_last_error() !== JSON_ERROR_NONE) {
+            echo 'Error decoding JSON: ' . json_last_error_msg();
+        } else {
+            // Decode the JSON response into an associative array
+            $data = json_decode($response, true);
+          
+            // Process the data as needed
+           foreach ($data as $item) {
+            //posted fields
+            $customerId = $item['unit_uuid'];
+            $paymentDate = $item['date_paid'];
+            $amount = $item['amount'];
+            $paymentMethodId = $item['payment_method_id'] ?? false;
+            $invoiceNumber = $item['invoice_number'];
+    
+            $partnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'search', [[['x_uuid', '=', $customerId]]]);
+            $partnerId = $partnerId[0] ?? false;
+    
+            $partnerData = $models->execute_kw($db, $uid, $password, 'res.partner', 'read', [$partnerId], ['fields' => ['company_id']]);
+            $companyId = $partnerData[0]['company_id'][0];
+            $companyId = json_encode($companyId);
+              echo ($companyId);
+            
+             $journalId = $models->execute_kw($db, $uid, $password, 'account.journal', 'search', [[['code', '=', 'BNK1'], ['company_id', '=', intval($companyId)]]]);
+             $journalId = json_encode($journalId[0]);
+        
+              // Fetch invoice ID based on invoice number (e.g., 'INV/2023/00055')
+              $invoiceNum = $invoiceNumber;
+              $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['name', '=', $invoiceNum], ['company_id', '=', intval($companyId)]]], );
+              $invoiceId = $invoiceId[0] ?? false;
+              
+              echo ('inoviceId '. $invoiceId );
+              // exit;
+             
+              $context = [
+                  'active_model' => 'account.move',
+                  'active_ids' => $invoiceId,
+              ];
+              
+              // Create the payment register record
+              $paymentRegisterData = [
+                //   'company_id' => $companyId, // ID of the company associated
+                  'partner_id' => $partnerId, // ID of the customer or partner
+                  'payment_date' => $paymentDate, // Date of the payment (YYYY-MM-DD format)
+                  'journal_id' => intval($journalId),
+                  'payment_method_line_id' => $paymentMethodId,
+                  'amount' => $amount/100, // Amount of the payment
+              ];
+              $paymentRegisterId = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'create', [$paymentRegisterData], ['context' => $context]);
+              $response = ['status' => 'success', 'payment_created' => $paymentRegisterId,];
+              echo json_encode($response);
+              
+              // Create the payments based on the payment register
+              if (is_int($paymentRegisterId)) {
+                  $regPayment = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'action_create_payments', [$paymentRegisterId]);
+                  $response = ['status' => 'success', 'payment_registered' => $regPayment,];
+                return $response;
+              }
+
+            }
+
+        } 
+    }
+
+    // Function to create a payment method
+    function createPaymentMethod($paymentMethodData) {
+        try {
+
+           // Extract invoice fields from the JSON data
+           $uuid = $paymentMethodData['uuid'];
+           $name = $paymentMethodData['name'];
+           $code = $paymentMethodData['code'];
+           $paymentType = $paymentMethodData['payment_type'];
+
+           include_once('include/connection/odoo_db.php');
+           require_once('include/ripcord/ripcord.php');
+
+           $common = ripcord::client("$url/xmlrpc/2/common");
+           // authenicate user
+           $uid = $common->authenticate($db, $username, $password, array());
+
+           // connect to odoo models
+           $models = ripcord::client("$url/xmlrpc/2/object");
+
+        //    // Fetch company id based on VM UUID
+        //    $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $company]]]);
+        //    $companyId = $companyId[0] ?? false;
+
+           $paymentMethodData = [
+            'x_uuid' => $uuid, // Name of the payment method
+            'name' => $name, // Name of the payment method
+            'code' => $code, // Code for the payment method
+            'payment_type' => $paymentType, // Type of payment (inbound or outbound)
+            'active' => true, // Whether the payment method is active
+            'payment_icon' => false, // You can provide an icon for the payment method here
+            ];
+    
+        // Create the payment method
+        $newPaymentMethodId = $models->execute_kw($db, $uid, $password, 'account.payment.method', 'create', [$paymentMethodData]);
+    
+        $response = ['status' => 'success', 'id_created' => $newPaymentMethodId];
+        return $response;
+
+       } catch (Exception $e) {
+           // Output the error
+           header('Content-Type: application/json', true, 500);
+           echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+       }
+
+   }
+
+   // Function to create a payment terms
+   function createPaymentTerms($paymentTermsData) {
+    try {
+
+       // Extract invoice fields from the JSON data
+       $uuid = $paymentTermsData['uuid'];
+       $name = $paymentTermsData['name'];
+       $code = $paymentTermsData['note'];
+       $days = $paymentTermsData['days'];
+
+       include_once('include/connection/odoo_db.php');
+       require_once('include/ripcord/ripcord.php');
+
+       $common = ripcord::client("$url/xmlrpc/2/common");
+       // authenicate user
+       $uid = $common->authenticate($db, $username, $password, array());
+
+       // connect to odoo models
+       $models = ripcord::client("$url/xmlrpc/2/object");
+
+    //    // Fetch company id based on VM UUID
+    //    $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $company]]]);
+    //    $companyId = $companyId[0] ?? false;
+
+        $paymentTermsData = [
+            'name' => 'Net 30 Days', // Name of the payment terms
+            'active' => true, // Whether the payment terms are active
+            'note' => 'Payment due within 30 days', // Additional notes for the payment terms
+            'line_ids' => [
+                // Numeric value to represent the days
+                ['days' => 30, 'value' => 'balance']
+            ]
+        ];
+
+        // Create the payment terms
+        $newPaymentTermsId = $models->execute_kw($db, $uid, $password, 'account.payment.term', 'create', [$paymentTermsData]);
+
+        $response = ['status' => 'success', 'id_created' => $newPaymentTermsId];
+        return $response;
+
+   } catch (Exception $e) {
+       // Output the error
+       header('Content-Type: application/json', true, 500);
+       echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+   }
+
+}

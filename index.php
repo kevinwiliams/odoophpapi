@@ -2,8 +2,8 @@
 
     header('Content-Type: application/json; charset=UTF-8');
 
-    // $apiUrl = 'https://odoophpapi.test/';
-    $apiUrl = 'https://paperless.vminnovations.dev/pm-api/';
+    $apiUrl = 'https://odoophpapi.test/';
+    // $apiUrl = 'https://paperless.vminnovations.dev/pm-api/';
 
     include 'include/functions.php';
 
@@ -50,7 +50,7 @@
                                 join units u on inv.unit_id = u.id
                                 join stratas s on s.id = inv.strata_id
                                 join invoice_details id on id.invoice_id = inv.id
-                                join items i on i.id = id.item_id where inv.id < 30";
+                                join items i on i.id = id.item_id where inv.id";
                     break;
                 case 'units':
                     $query =    "select u.uuid, concat(u.short_description, ' / Lot ' ,u.lot_number) name, s.uuid company_uuid, a.address_line_1 street, p.name city, pr.user_id, us.email, us.contact_number phone from units u
@@ -69,11 +69,22 @@
                     $query =    "select v.uuid, v.description name, s.uuid company_uuid,  'service' product_type, 3 'category', 100 price from vendors v
                                 join stratas s on s.id = v.strata_id";
                     break;
+
                 case 'expenses':
                     $query =    "select e.uuid inv_uuid, e.expense_no, e.expense_date, e.due_date, e.sub_total_in_cents price, s.uuid company_uuid, s.strata_name, ed.description, ed.quantity, ed.tax_rate, ed.sub_total_in_cents price, v.description label, v.uuid vendor_uuid  from expenses e
                                 join vendors v on v.id = e.vendor_id
                                 join expense_details ed on ed.expense_id = e.id
                                 join stratas s on s.id = e.property_id";
+                    break;
+
+                case 'invoicepayments':
+                    $query =    "select s.uuid strata_uuid, s.strata_name, u.uuid unit_uuid, i.uuid inv_uuid, ip.date_paid, ip.payment_method_id, ip.reference_number, ip.amount_in_cents amount, ip.id, i.invoice_number
+                                from invoice_payments ip
+                                join invoices i on i.id = ip.invoice_id
+                                join stratas s on s.id = i.strata_id
+                                join units u on u.id = i.unit_id
+                                join payment_methods pm on pm.id = ip.payment_method_id 
+                                where ip.id = 1";
                     break;
                 default:
                     $query =    "select u.uuid, concat(u.first_name, ' ', u.last_name) name, u.email, u.contact_number phone, rt.key title, ur.is_active, s.uuid company_uuid, ur.strata_id company_id, s.strata_name, s.email_address, a.* 
@@ -191,14 +202,26 @@
                     loadVendors($apiUrl);
                     break;
 
-                case 'loadpayments':
-                    loadPayments($apiUrl);
+                case 'loadinvpayments':
+                    loadInvoicePayments($apiUrl);
                     break;
 
                 case 'loadexpenses':
                     loadExpenses($apiUrl);
                     break;
 
+                case 'paymentmethod':
+                    $postData = file_get_contents('php://input');
+                    $paymentMethodData = json_decode($postData, true);
+                    $response = createPaymentMethod($paymentMethodData);
+                    echo json_encode($response, JSON_PRETTY_PRINT);
+                    break;
+                case 'paymentterm':
+                    $postData = file_get_contents('php://input');
+                    $paymentTermsData = json_decode($postData, true);
+                    $response = createPaymentTerms($paymentTermsData);
+                    echo json_encode($response, JSON_PRETTY_PRINT);
+                    break;
                 default:
                     header('Content-Type: application/json', true, 404);
                     echo json_encode(['status' => 'error', 'message' => 'Invalid endpoint'], JSON_PRETTY_PRINT);
