@@ -1498,8 +1498,8 @@
         $context = stream_context_create($arrContextOptions);
         $response = file_get_contents("$apiUrl?e=invoicepayments", false, $context);
 
-        //echo $response;
-
+        // echo $response;
+        // exit;
         // Process the API response
         if ($response === null && json_last_error() !== JSON_ERROR_NONE) {
             echo 'Error decoding JSON: ' . json_last_error_msg();
@@ -1532,8 +1532,8 @@
               $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['name', '=', $invoiceNum], ['company_id', '=', intval($companyId)]]], );
               $invoiceId = $invoiceId[0] ?? false;
               
-              echo ('inoviceId '. $invoiceId );
-              // exit;
+            //   echo ('inoviceId '. $invoiceId. 'CompanyId '. $companyId);
+            //   exit;
              
               $context = [
                   'active_model' => 'account.move',

@@ -216,7 +216,7 @@
                 case 'loadexpenses':
                     loadExpenses($apiUrl);
                     break;
-                    
+
                 case 'loadinvpayments':
                     loadInvoicePayments($apiUrl);
                     break;
