@@ -1,7 +1,5 @@
 <?php
     
-    $selectedConnection = 'test'; // Change this to switch between different connections
-    
     $connections = [
         'test' => [
             'host' => '127.0.0.1',

@@ -1,7 +1,5 @@
 <?php
 
-    $selectedConnection = 'test'; // Change this to switch between different connections
-
     $connections = [
         'test' => [
             'url' => 'com/',

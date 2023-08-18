@@ -132,11 +132,9 @@
             // Set the response header and encode the data as JSON
             header('Content-Type: application/json');
             echo json_encode($data);
-
         
             // Close the database connection
             mysqli_close($connection);
-
             exit;
 
         } catch (Exception $e) {
