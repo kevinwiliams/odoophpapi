@@ -1558,7 +1558,7 @@
               if (is_int($paymentRegisterId)) {
                   $regPayment = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'action_create_payments', [$paymentRegisterId]);
                   $response = ['status' => 'success', 'payment_registered' => $regPayment,];
-                return $response;
+                  echo json_encode($response);
               }
 
             }

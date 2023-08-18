@@ -2,7 +2,7 @@
 
     header('Content-Type: application/json; charset=UTF-8');
 
-    $selectedConnection = 'test';
+    include 'include/connection/server.php';
 
     $urls = [
         'test' => [
