@@ -2,8 +2,25 @@
 
     header('Content-Type: application/json; charset=UTF-8');
 
-    // $apiUrl = 'https://odoophpapi.test/';
-    $apiUrl = 'https://paperless.vminnovations.dev/pm-api/';
+    $selectedConnection = 'test';
+
+    $urls = [
+        'test' => [
+            'url' => 'https://odoophpapi.test/'
+        ],
+        'vm_dev' => [
+            'url' => 'https://paperless.vminnovations.dev/pm-api/'
+        ]
+    ];
+
+    // Check if the selected connection exists
+    if (array_key_exists($selectedConnection, $urls)) {
+        $connection = $urls[$selectedConnection];
+        $apiUrl = $connection['url'];
+    } else {
+        echo "Selected connection doesn't exist.";
+    }
+    
 
     include 'include/functions.php';
 
@@ -50,7 +67,7 @@
                                 join units u on inv.unit_id = u.id
                                 join stratas s on s.id = inv.strata_id
                                 join invoice_details id on id.invoice_id = inv.id
-                                join items i on i.id = id.item_id where inv.id";
+                                join items i on i.id = id.item_id";
                     break;
                 case 'units':
                     $query =    "select u.uuid, concat(u.short_description, ' / Lot ' ,u.lot_number) name, s.uuid company_uuid, a.address_line_1 street, p.name city, pr.user_id, us.email, us.contact_number phone from units u
@@ -83,13 +100,12 @@
                                 join invoices i on i.id = ip.invoice_id
                                 join stratas s on s.id = i.strata_id
                                 join units u on u.id = i.unit_id
-                                join payment_methods pm on pm.id = ip.payment_method_id 
-                                where ip.id";
+                                join payment_methods pm on pm.id = ip.payment_method_id";
                     break;
                 case 'expensepayments':
                     $query =    "select ep.date_paid, ep.payment_method_id, ep.amount_in_cents amount, s.uuid unit_uuid, s.strata_name, e.expense_no invoice_number from expense_payments ep
                                 join expenses e on e.id = ep.expense_id
-                                join stratas s on s.id = e.property_id where e.id";
+                                join stratas s on s.id = e.property_id";
                     break;
                 default:
                     $query =    "select u.uuid, concat(u.first_name, ' ', u.last_name) name, u.email, u.contact_number phone, rt.key title, ur.is_active, s.uuid company_uuid, ur.strata_id company_id, s.strata_name, s.email_address, a.* 
@@ -128,8 +144,6 @@
             header('Content-Type: application/json', true, 500);
             echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
         }
-    
-       
     }
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_REQUEST['e'])) {
@@ -236,7 +250,6 @@
                     echo json_encode(['status' => 'error', 'message' => 'Invalid endpoint'], JSON_PRETTY_PRINT);
                     break;
             }
-    
            
         } catch (Exception $e) {
             // Output the error
