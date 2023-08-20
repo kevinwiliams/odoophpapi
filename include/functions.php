@@ -1515,6 +1515,8 @@
             $amount = $item['amount'];
             $paymentMethodId = $item['payment_method_id'] ?? false;
             $invoiceNumber = $item['invoice_number'];
+            $ref = $item['reference_number'];
+            $inv_uuid = $item['inv_uuid'];
     
             $partnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'search', [[['x_uuid', '=', $customerId]]]);
             $partnerId = $partnerId[0] ?? false;
@@ -1543,7 +1545,7 @@
               
               // Create the payment register record
               $paymentRegisterData = [
-                //   'company_id' => $companyId, // ID of the company associated
+                  'communication' => $ref,
                   'partner_id' => $partnerId, // ID of the customer or partner
                   'payment_date' => $paymentDate, // Date of the payment (YYYY-MM-DD format)
                   'journal_id' => intval($journalId),
@@ -1612,6 +1614,7 @@
             $amount = $item['amount'];
             $paymentMethodId = $item['payment_method_id'] ?? false;
             $invoiceNumber = $item['invoice_number'];
+            $ref = $item['reference_code'];
     
             $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $customerId]]]);
             $companyId = $companyId[0] ?? false;
@@ -1645,6 +1648,7 @@
               // Create the payment register record
               $paymentRegisterData = [
                 //   'company_id' => $companyId, // ID of the company associated
+                  'communication' => $ref,
                   'partner_id' => $companyId, // ID of the customer or partner
                   'payment_date' => $paymentDate, // Date of the payment (YYYY-MM-DD format)
                   'journal_id' => intval($journalId),

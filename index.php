@@ -63,11 +63,12 @@
                     break;
 
                 case 'invoices':
-                    $query =    "select s.uuid company_id, inv.uuid inv_uuid, inv.invoice_number, inv.invoice_date, inv.due_date, i.uuid item_uuid, id.quantity, id.unit_cost_in_cents unit_cost, id.tax_rate, u.uuid customer_id from invoices inv
+                    $query =    "select inv.id, s.strata_name, s.uuid company_id, inv.uuid inv_uuid, inv.invoice_number, inv.invoice_date, inv.due_date, i.uuid item_uuid, id.quantity, id.unit_cost_in_cents unit_cost, id.tax_rate, u.uuid customer_id from invoices inv
                                 join units u on inv.unit_id = u.id
                                 join stratas s on s.id = inv.strata_id
                                 join invoice_details id on id.invoice_id = inv.id
-                                join items i on i.id = id.item_id";
+                                join items i on i.id = id.item_id
+                                order by inv.id";
                     break;
                 case 'units':
                     $query =    "select u.uuid, concat(u.short_description, ' / Lot ' ,u.lot_number) name, s.uuid company_uuid, a.address_line_1 street, p.name city, pr.user_id, us.email, us.contact_number phone from units u
@@ -88,10 +89,12 @@
                     break;
 
                 case 'expenses':
-                    $query =    "select e.uuid inv_uuid, e.expense_no, e.expense_date, e.due_date, e.sub_total_in_cents price, s.uuid company_uuid, s.strata_name, ed.description, ed.quantity, ed.tax_rate, ed.sub_total_in_cents price, v.description label, v.uuid vendor_uuid  from expenses e
+                    $query =    "select e.uuid inv_uuid, e.expense_no, e.expense_date, e.due_date, e.sub_total_in_cents price, s.uuid company_uuid, s.strata_name, ed.description, ed.quantity, ed.tax_rate, ed.sub_total_in_cents price, v.description label, v.uuid vendor_uuid  
+                                from expenses e
                                 join vendors v on v.id = e.vendor_id
                                 join expense_details ed on ed.expense_id = e.id
-                                join stratas s on s.id = e.property_id";
+                                join stratas s on s.id = e.property_id
+                                order by e.id";
                     break;
 
                 case 'invoicepayments':
@@ -100,12 +103,15 @@
                                 join invoices i on i.id = ip.invoice_id
                                 join stratas s on s.id = i.strata_id
                                 join units u on u.id = i.unit_id
-                                join payment_methods pm on pm.id = ip.payment_method_id";
+                                join payment_methods pm on pm.id = ip.payment_method_id
+                                order by ip.id";
                     break;
+                    
                 case 'expensepayments':
-                    $query =    "select ep.date_paid, ep.payment_method_id, ep.amount_in_cents amount, s.uuid unit_uuid, s.strata_name, e.expense_no invoice_number from expense_payments ep
+                    $query =    "select ep.date_paid, ep.payment_method_id, ep.amount_in_cents amount, s.uuid unit_uuid, s.strata_name, e.expense_no invoice_number, ep.reference_code from expense_payments ep
                                 join expenses e on e.id = ep.expense_id
-                                join stratas s on s.id = e.property_id";
+                                join stratas s on s.id = e.property_id
+                                order by ep.id";
                     break;
                 default:
                     $query =    "select u.uuid, concat(u.first_name, ' ', u.last_name) name, u.email, u.contact_number phone, rt.key title, ur.is_active, s.uuid company_uuid, ur.strata_id company_id, s.strata_name, s.email_address, a.* 
