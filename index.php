@@ -24,6 +24,43 @@
 
     include 'include/functions.php';
 
+    if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_REQUEST['t'])) {
+        $endpoint = $_REQUEST['t'];
+
+        if ($endpoint == 'odoo') {
+            include_once('include/connection/odoo_db.php');
+            require_once('include/ripcord/ripcord.php');
+    
+            $common = ripcord::client("$url/xmlrpc/2/common");
+            // authenicate user
+            $uid = $common->authenticate($db, $username, $password, array());
+
+            
+            if ($uid) {
+                $response = ['status' => 'success', 'connection' => 'Autheniticated', 'host' => $url];
+                echo json_encode($response);
+            } else {
+                $response = ['status' => 'fail', 'connection' => 'Failed'];
+                echo json_encode($response);
+            }
+        }
+
+        if ($endpoint == 'mysql') {
+            include 'include/connection/mysql_db.php';
+            // Establish a connection to your MySQL database
+            $connection = mysqli_connect($host, $username, $password, $database);
+
+            if ($connection) {
+                $response = ['status' => 'success', 'connection' => 'Autheniticated', 'host' => $host];
+                echo json_encode($response);
+            } else {
+                $response = ['status' => 'fail', 'connection' => 'Failed'];
+                echo json_encode($response);
+            }
+        }
+       
+    }
+
     // API endpoint to retrieve data
     if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_REQUEST['e'])) {
 
