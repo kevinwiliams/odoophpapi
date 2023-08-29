@@ -257,13 +257,13 @@
                     loadUnits($apiUrl);
                     break;
                 
-                    case 'loadproducts':
-                        loadProducts($apiUrl);
-                        break;
+                case 'loadproducts':
+                    loadProducts($apiUrl);
+                    break;
                     
-                    case 'loadvendorproducts':
-                        loadVendorProducts($apiUrl);
-                        break;
+                case 'loadvendorproducts':
+                    loadVendorProducts($apiUrl);
+                    break;
                 case 'loadinvoices':
                     loadInvoices($apiUrl);
                     break;

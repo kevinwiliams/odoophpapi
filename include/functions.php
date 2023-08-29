@@ -11,177 +11,12 @@
         return $code;
     }
 
-    // Function to create an invoice and its lines
-    function createInvoices($models, $uuid, $companyId, $partnerId, $invoiceNumber, $invoiceDate, $invoiceDateDue, $invoiceLines, $connection)
-    {
-        $db = $connection['db'];
-        $uid = $connection['uid'];
-        $password = $connection['password'];
-
-        $invoiceData = [
-            'move_type' => 'out_invoice', // Type of the invoice (in_invoice for vendor invoice)
-            'partner_id' => $partnerId, // ID of the vendor or partner
-            'company_id' => intval($companyId), // ID of the company for which the invoice is created
-        ];
-
-        // Create the invoice
-        $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'create', [$invoiceData]);
-
-        // Fetch account id based on VM UUID
-        $accountId = $models->execute_kw($db, $uid, $password, 'account.account', 'search', [[['name', '=', 'Product Sales'], ['company_id', '=', intval($companyId)]]]);
-        $accountId = $accountId[0] ?? false;
-        // echo 'ACID:'.($accountId);
-
-        // Create the invoice lines
-        foreach ($invoiceLines as $line) {
-
-            $tax = [];
-                
-            // Fetch currency id based on name (e.g., 'USD')
-            $productId = $models->execute_kw($db, $uid, $password, 'product.product', 'search', [[['x_uuid', '=', $line['item_uuid']]]]);
-            $productId = $productId[0] ?? false;
-
-            if($line['tax_rate'] > 0){
-                $tax =  $models->execute_kw($db, $uid, $password, 'account.tax', 'search', [[['type_tax_use', '=', 'sale'], ['company_id', '=', intval($companyId)]]]);
-                // echo('TAXID:'.$tax[0]);
-            }
-
-            $invoiceLineIds[] = [0, false, [
-                        'product_id' => $productId,
-                        // 'name' => $line['name'] ?? '',
-                        'quantity' => $line['quantity'],
-                        'price_unit' => $line['unit_cost']/100 ?? 0,
-                        'account_id' => $accountId,
-                        'tax_ids' => (!empty($tax)) ? [$tax[0]] : []
-                    ]];
-        }
-
-        // Fetch currency id based on name (e.g., 'USD')
-        $currencyId = $models->execute_kw($db, $uid, $password, 'res.currency', 'search', [[['name', '=', 'JMD']]]);
-        $currencyId = $currencyId[0] ?? false;
-
-        $invoiceData = [
-                    'x_uuid' => $uuid,
-                    'name' => $invoiceNumber,
-                    'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format) //default to today's date if not set
-                    'invoice_date_due' =>  $invoiceDateDue,
-                    'company_id' => intval($companyId), // Company associated with the invoice
-                    'company_currency_id' => $currencyId,
-                    'currency_id' => $currencyId, // Currency used in the invoice
-                    'invoice_line_ids' => $invoiceLineIds
-                ];
-        
-                echo json_encode($invoiceData, JSON_PRETTY_PRINT);
-        
-        // update created invoice with journal details
-        $newInvoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$invoiceId],$invoiceData]);
-
-        $response = [ 'status' => 'success', 'is_updated' => $newInvoiceId ];
-        echo json_encode($response);
-        
-        //POST drafted invoice if information provided is valid
-        if ($newInvoiceId) {
-            $postedInvoice = $models->execute_kw($db, $uid, $password, 'account.move', 'action_post', [$invoiceId]);
-
-            $response = [ 'status' => 'success', 'invoice' => $postedInvoice ];
-            echo json_encode($response);
-        }
-
-        return $invoiceId;
-    }
-
-    // Function to create a bill and its lines
-    function createExpenses($models, $uuid, $partnerId, $invoiceNumber, $invoiceDate, $invoiceDateDue, $invoiceLines, $connection)
-    {
-        $db = $connection['db'];
-        $uid = $connection['uid'];
-        $password = $connection['password'];
-
-        $partnerData = $models->execute_kw($db, $uid, $password, 'res.partner', 'read', [$partnerId], ['fields' => ['company_id']]);
-        $companyId = $partnerData[0]['company_id'][0];
-        // $companyId = json_encode($companyId);
-    
-        $accountId = $models->execute_kw($db, $uid, $password, 'account.account', 'search', [[['name', '=', 'Expenses'], ['company_id', '=', $companyId]]]);
-        $accountId = $accountId[0] ?? false;
-
-
-        $journalId = $models->execute_kw($db, $uid, $password, 'account.journal', 'search', [[['code', '=', 'BILL'], ['company_id', '=', intval($companyId)]]]);
-        $journalId = $journalId[0] ?? false;
-
-
-        $billData = [
-            'move_type' => 'in_invoice', // Type of the invoice (in_invoice for vendor invoice)
-            'partner_id' => $partnerId, // ID of the vendor or partner
-            'journal_id' => intval($journalId), // ID of the company for which the invoice is created
-        ];
-
-        // Create the bill
-        $billId = $models->execute_kw($db, $uid, $password, 'account.move', 'create', [$billData]);
-
-        // Create the invoice lines
-        foreach ($invoiceLines as $line) {
-
-            $tax = [];
-
-            // Fetch currency id based on name (e.g., 'USD')
-            $productId = $models->execute_kw($db, $uid, $password, 'product.product', 'search', [[['x_uuid', '=', $line['vendor_uuid']]]]);
-            $productId = $productId[0] ?? false;
-
-            if($line['tax_rate'] > 0){
-                $tax =  $models->execute_kw($db, $uid, $password, 'account.tax', 'search', [[['type_tax_use', '=', 'sale'], ['company_id', '=', intval($companyId)]]]);
-                // echo('TAXID:'.$tax[0]);
-            }
-
-            $invoiceLineIds[] = [0, false, [
-                'product_id' => $productId,
-                'name' => $line['description'] ?? false,
-                'quantity' => $line['quantity'],
-                'price_unit' => $line['price']/100 ?? false,
-                'account_id' => $accountId,
-                'tax_ids' => (!empty($tax)) ? [$tax[0]] : []
-
-            ]];
-
-        }
-
-        // Fetch currency id based on name (e.g., 'USD')
-        $currencyId = $models->execute_kw($db, $uid, $password, 'res.currency', 'search', [[['name', '=', 'JMD']]]);
-        $currencyId = $currencyId[0] ?? false;
-
-        
-        $billData = [
-            'name' => $invoiceNumber,
-            'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format)
-            'invoice_date_due' =>  $invoiceDateDue,
-            'currency_id' => $currencyId,
-            'ref' => $invoiceNumber,
-            'invoice_line_ids' => $invoiceLineIds,
-        ];
-
-        //update created bill with journal details
-        $newBillId = $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$billId],$billData]);
-
-        $response = [ 'status' => 'success', 'is_updated' => $newBillId ];
-        // echo json_encode($response);
-        
-        //POST drafted bill if information provided is valid
-        if ($newBillId) {
-            $postedBill = $models->execute_kw($db, $uid, $password, 'account.move', 'action_post', [$billId]);
-
-            $response = [ 'status' => 'success', 'bill' => $postedBill ];
-            return $response;
-        }
-
-        return $billId;
-
-    }
-
     // Function to create a company
     function createCompany($companyData) {
         try {
    
            //posted fields
-           $uuid = $companyData['uuid'];
+           $uuid = $companyData['uuid'] ?? false;
            $companyName = $companyData['name'];
            $companyEmail = $companyData['email'];
            $companyPhone = $companyData['phone'];
@@ -302,7 +137,7 @@
             $company_uuid = $invoiceInfo['company_id'];
             $invoiceDate = $invoiceInfo['invoice_date'];
             $invoiceDateDue = $invoiceInfo['invoice_date_due'];
-            $currency = $invoiceInfo['currency'];
+            $currency = $invoiceInfo['currency'] ?? 'JMD';
             $paymentTerm = $invoiceInfo['payment_term'] ?? false;
             $invoiceLines = $invoiceInfo['invoice_lines'];
                 //connect to odoo
@@ -311,11 +146,6 @@
             $common = ripcord::client("$url/xmlrpc/2/common");
             $uid = $common->authenticate($db, $username, $password, array());
 
-            //    if ($uid)
-            //        echo 'Autheniticated';
-            //    else
-            //        echo 'Not authenticated';
-        
             //load odoo models
             $models = ripcord::client("$url/xmlrpc/2/object");
 
@@ -456,11 +286,6 @@
             require_once('include/ripcord/ripcord.php');
             $common = ripcord::client("$url/xmlrpc/2/common");
             $uid = $common->authenticate($db, $username, $password, array());
-            // if ($uid)
-            //     echo 'Autheniticated';
-            // else
-            //     echo 'Not authenticated';
-            
         
             $models = ripcord::client("$url/xmlrpc/2/object"); 
            
@@ -680,6 +505,172 @@
             echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
         }
     }
+///////////////////     ///////////////      //////////////////////      /////////////////////       ////////////////
+
+    // Function to create an invoice and its lines
+    function createInvoices($models, $uuid, $companyId, $partnerId, $invoiceNumber, $invoiceDate, $invoiceDateDue, $invoiceLines, $connection)
+    {
+        $db = $connection['db'];
+        $uid = $connection['uid'];
+        $password = $connection['password'];
+
+        $invoiceData = [
+            'move_type' => 'out_invoice', // Type of the invoice (in_invoice for vendor invoice)
+            'partner_id' => $partnerId, // ID of the vendor or partner
+            'company_id' => intval($companyId), // ID of the company for which the invoice is created
+        ];
+
+        // Create the invoice
+        $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'create', [$invoiceData]);
+
+        // Fetch account id based on VM UUID
+        $accountId = $models->execute_kw($db, $uid, $password, 'account.account', 'search', [[['name', '=', 'Product Sales'], ['company_id', '=', intval($companyId)]]]);
+        $accountId = $accountId[0] ?? false;
+        // echo 'ACID:'.($accountId);
+
+        // Create the invoice lines
+        foreach ($invoiceLines as $line) {
+
+            $tax = [];
+                
+            // Fetch currency id based on name (e.g., 'USD')
+            $productId = $models->execute_kw($db, $uid, $password, 'product.product', 'search', [[['x_uuid', '=', $line['item_uuid']]]]);
+            $productId = $productId[0] ?? false;
+
+            if($line['tax_rate'] > 0){
+                $tax =  $models->execute_kw($db, $uid, $password, 'account.tax', 'search', [[['type_tax_use', '=', 'sale'], ['company_id', '=', intval($companyId)]]]);
+                // echo('TAXID:'.$tax[0]);
+            }
+
+            $invoiceLineIds[] = [0, false, [
+                        'product_id' => $productId,
+                        // 'name' => $line['name'] ?? '',
+                        'quantity' => $line['quantity'],
+                        'price_unit' => $line['unit_cost']/100 ?? 0,
+                        'account_id' => $accountId,
+                        'tax_ids' => (!empty($tax)) ? [$tax[0]] : []
+                    ]];
+        }
+
+        // Fetch currency id based on name (e.g., 'USD')
+        $currencyId = $models->execute_kw($db, $uid, $password, 'res.currency', 'search', [[['name', '=', 'JMD']]]);
+        $currencyId = $currencyId[0] ?? false;
+
+        $invoiceData = [
+                    'x_uuid' => $uuid,
+                    'name' => $invoiceNumber,
+                    'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format) //default to today's date if not set
+                    'invoice_date_due' =>  $invoiceDateDue,
+                    'company_id' => intval($companyId), // Company associated with the invoice
+                    'company_currency_id' => $currencyId,
+                    'currency_id' => $currencyId, // Currency used in the invoice
+                    'invoice_line_ids' => $invoiceLineIds
+                ];
+        
+                echo json_encode($invoiceData, JSON_PRETTY_PRINT);
+        
+        // update created invoice with journal details
+        $newInvoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$invoiceId],$invoiceData]);
+
+        $response = [ 'status' => 'success', 'is_updated' => $newInvoiceId ];
+        echo json_encode($response);
+        
+        //POST drafted invoice if information provided is valid
+        if ($newInvoiceId) {
+            $postedInvoice = $models->execute_kw($db, $uid, $password, 'account.move', 'action_post', [$invoiceId]);
+
+            $response = [ 'status' => 'success', 'invoice' => $postedInvoice ];
+            echo json_encode($response);
+        }
+
+        return $invoiceId;
+    }
+
+    // Function to create a bill and its lines
+    function createExpenses($models, $uuid, $partnerId, $invoiceNumber, $invoiceDate, $invoiceDateDue, $invoiceLines, $connection)
+    {
+        $db = $connection['db'];
+        $uid = $connection['uid'];
+        $password = $connection['password'];
+
+        $partnerData = $models->execute_kw($db, $uid, $password, 'res.partner', 'read', [$partnerId], ['fields' => ['company_id']]);
+        $companyId = $partnerData[0]['company_id'][0];
+        // $companyId = json_encode($companyId);
+    
+        $accountId = $models->execute_kw($db, $uid, $password, 'account.account', 'search', [[['name', '=', 'Expenses'], ['company_id', '=', $companyId]]]);
+        $accountId = $accountId[0] ?? false;
+
+
+        $journalId = $models->execute_kw($db, $uid, $password, 'account.journal', 'search', [[['code', '=', 'BILL'], ['company_id', '=', intval($companyId)]]]);
+        $journalId = $journalId[0] ?? false;
+
+
+        $billData = [
+            'move_type' => 'in_invoice', // Type of the invoice (in_invoice for vendor invoice)
+            'partner_id' => $partnerId, // ID of the vendor or partner
+            'journal_id' => intval($journalId), // ID of the company for which the invoice is created
+        ];
+
+        // Create the bill
+        $billId = $models->execute_kw($db, $uid, $password, 'account.move', 'create', [$billData]);
+
+        // Create the invoice lines
+        foreach ($invoiceLines as $line) {
+
+            $tax = [];
+
+            // Fetch currency id based on name (e.g., 'USD')
+            $productId = $models->execute_kw($db, $uid, $password, 'product.product', 'search', [[['x_uuid', '=', $line['vendor_uuid']]]]);
+            $productId = $productId[0] ?? false;
+
+            if($line['tax_rate'] > 0){
+                $tax =  $models->execute_kw($db, $uid, $password, 'account.tax', 'search', [[['type_tax_use', '=', 'sale'], ['company_id', '=', intval($companyId)]]]);
+                // echo('TAXID:'.$tax[0]);
+            }
+
+            $invoiceLineIds[] = [0, false, [
+                'product_id' => $productId,
+                'name' => $line['description'] ?? false,
+                'quantity' => $line['quantity'],
+                'price_unit' => $line['price']/100 ?? false,
+                'account_id' => $accountId,
+                'tax_ids' => (!empty($tax)) ? [$tax[0]] : []
+
+            ]];
+
+        }
+
+        // Fetch currency id based on name (e.g., 'USD')
+        $currencyId = $models->execute_kw($db, $uid, $password, 'res.currency', 'search', [[['name', '=', 'JMD']]]);
+        $currencyId = $currencyId[0] ?? false;
+
+        
+        $billData = [
+            'name' => $invoiceNumber,
+            'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format)
+            'invoice_date_due' =>  $invoiceDateDue,
+            'currency_id' => $currencyId,
+            'ref' => $invoiceNumber,
+            'invoice_line_ids' => $invoiceLineIds,
+        ];
+
+        //update created bill with journal details
+        $newBillId = $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$billId],$billData]);
+
+        $response = [ 'status' => 'success', 'is_updated' => $newBillId ];
+        // echo json_encode($response);
+        
+        //POST drafted bill if information provided is valid
+        if ($newBillId) {
+            $postedBill = $models->execute_kw($db, $uid, $password, 'account.move', 'action_post', [$billId]);
+
+            $response = [ 'status' => 'success', 'bill' => $postedBill ];
+            return $response;
+        }
+
+        return $billId;
+
+    }
 
     // Function to load all companies to odoo
     function loadCompanies($apiUrl) {
@@ -691,11 +682,7 @@
         
         //authenicate user
         $uid = $common->authenticate($db, $username, $password, array());
-        // if ($uid) {
-        //     echo 'Autheniticated';
-        // } else {
-        //     echo 'Not authenticated';
-        // }
+        
 
         //connect to odoo models
         $models = ripcord::client("$url/xmlrpc/2/object");
@@ -812,11 +799,7 @@
 
         //authenicate user
         $uid = $common->authenticate($db, $username, $password, array());
-        // if ($uid) {
-        //     echo 'Autheniticated';
-        // } else {
-        //     echo 'Not authenticated';
-        // }
+        
 
         //connect to odoo models
         $models = ripcord::client("$url/xmlrpc/2/object");
@@ -886,11 +869,7 @@
 
         //authenicate user
         $uid = $common->authenticate($db, $username, $password, array());
-        // if ($uid) {
-        //     echo 'Autheniticated';
-        // } else {
-        //     echo 'Not authenticated';
-        // }
+        
 
         //connect to odoo models
         $models = ripcord::client("$url/xmlrpc/2/object");
@@ -962,11 +941,7 @@
 
         //authenicate user
         $uid = $common->authenticate($db, $username, $password, array());
-        // if ($uid) {
-        //     echo 'Autheniticated';
-        // } else {
-        //     echo 'Not authenticated';
-        // }
+        
 
         //connect to odoo models
         $models = ripcord::client("$url/xmlrpc/2/object");
@@ -1063,11 +1038,7 @@
 
         //authenicate user
         $uid = $common->authenticate($db, $username, $password, array());
-        // if ($uid) {
-        //     echo 'Autheniticated';
-        // } else {
-        //     echo 'Not authenticated';
-        // }
+        
 
         //connect to odoo models
         $models = ripcord::client("$url/xmlrpc/2/object");
@@ -1143,11 +1114,7 @@
 
         //authenicate user
         $uid = $common->authenticate($db, $username, $password, array());
-        // if ($uid) {
-        //     echo 'Autheniticated';
-        // } else {
-        //     echo 'Not authenticated';
-        // }
+        
 
         //connect to odoo models
         $models = ripcord::client("$url/xmlrpc/2/object");
@@ -1204,7 +1171,7 @@
         } 
     }
 
-    // TODO: Function to load all payments to invoices
+    // Function to load all payments to invoices
     function loadPayments($apiUrl){
         try {
 
@@ -1307,11 +1274,7 @@
 
         //authenicate user
         $uid = $common->authenticate($db, $username, $password, array());
-        // if ($uid) {
-        //     echo 'Autheniticated';
-        // } else {
-        //     echo 'Not authenticated';
-        // }
+        
 
         //connect to odoo models
         $models = ripcord::client("$url/xmlrpc/2/object");
@@ -1400,11 +1363,7 @@
 
         //authenicate user
         $uid = $common->authenticate($db, $username, $password, array());
-        // if ($uid) {
-        //     echo 'Autheniticated';
-        // } else {
-        //     echo 'Not authenticated';
-        // }
+        
 
         //connect to odoo models
         $models = ripcord::client("$url/xmlrpc/2/object");
@@ -1481,11 +1440,7 @@
 
         //authenicate user
         $uid = $common->authenticate($db, $username, $password, array());
-        // if ($uid) {
-        //     echo 'Autheniticated';
-        // } else {
-        //     echo 'Not authenticated';
-        // }
+        
 
         //connect to odoo models
         $models = ripcord::client("$url/xmlrpc/2/object");
@@ -1580,11 +1535,7 @@
 
         //authenicate user
         $uid = $common->authenticate($db, $username, $password, array());
-        // if ($uid) {
-        //     echo 'Autheniticated';
-        // } else {
-        //     echo 'Not authenticated';
-        // }
+        
 
         //connect to odoo models
         $models = ripcord::client("$url/xmlrpc/2/object");
