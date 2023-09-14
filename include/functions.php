@@ -63,7 +63,7 @@
            ];
            
            $newCompanyId = $models->execute_kw($db, $uid, $password, 'res.company', 'create', [$companyData]);
-           $responseC = [ 'status' => 'success', 'id_created' => $newCompanyId];
+           $responseC = [ 'status' => 'success', 'company_id_created' => $newCompanyId];
    
            if (is_int($newCompanyId)) {
                // Get the current year
@@ -230,6 +230,120 @@
         }
     }
 
+    // Function to create an invoice
+    function updateInvoice($invoiceInfo) {
+        try {
+
+            //posted fields
+            $uuid = $invoiceInfo['uuid'] ?? false;
+            $invoiceNumber = $invoiceInfo['name'] ?? false;
+            $customer_uuid = $invoiceInfo['customer_id'];
+            $company_uuid = $invoiceInfo['company_id'];
+            $invoiceDate = $invoiceInfo['invoice_date'];
+            $invoiceDateDue = $invoiceInfo['invoice_date_due'];
+            $currency = $invoiceInfo['currency'] ?? 'JMD';
+            $paymentTerm = $invoiceInfo['payment_term'] ?? false;
+            $invoiceLines = $invoiceInfo['invoice_lines'];
+                //connect to odoo
+            include('include/connection/odoo_db.php');
+            require_once('include/ripcord/ripcord.php');
+            $common = ripcord::client("$url/xmlrpc/2/common");
+            $uid = $common->authenticate($db, $username, $password, array());
+
+            //load odoo models
+            $models = ripcord::client("$url/xmlrpc/2/object");
+
+            //search for invoice ID by uuid (search_read)
+            //$models->execute_kw($db, $uid, $password, 'res.partner', 'read', array($ids), array('fields'=>array('name', 'country_id', 'comment')));
+            //draft invoice by invoice ID  : action "button_draft" , model "account.move"
+            //"read" w/ invoice ID to pull invoice_lines : action: "read", model:  "account.move"
+            //remove invoice line_items from "account.move.line"
+            //$models->execute_kw($db, $uid, $password, 'res.partner', 'unlink', array(array($id)));
+            //
+
+
+
+            // Fetch company id based on VM UUID
+            $partnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'search', [[['x_uuid', '=', $customer_uuid]]]);
+            $partnerId = $partnerId[0] ?? false;
+            //    echo 'PARTID:'.$partnerId;
+
+            // Fetch company id based on VM UUID
+            $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $company_uuid]]]);
+            $companyId = $companyId[0] ?? false;
+            //    echo 'COMP:'.($companyId);
+
+            // Fetch account id based on VM UUID
+            $accountId = $models->execute_kw($db, $uid, $password, 'account.account', 'search', [[['name', '=', 'Product Sales'], ['company_id', '=', intval($companyId)]]]);
+            $accountId = $accountId[0] ?? false;
+            // echo 'ACID:'.($accountId);
+            
+            //create invoice with associated partner_id/customer
+            $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'create', [['move_type' => 'out_invoice', 'partner_id' => $partnerId, 'company_id' => intval($companyId)]]); 
+            $response = [ 'status' => 'success', 'id_created' => $invoiceId ];
+            // echo json_encode($response);
+
+            //if ID is created 
+            if (is_int($invoiceId)) {
+                // Fetch currency id based on name (e.g., 'USD')
+                $currencyId = $models->execute_kw($db, $uid, $password, 'res.currency', 'search', [[['name', '=', $currency]]]);
+                $currencyId = $currencyId[0] ?? false;
+                //invoice data
+                $invoiceLineIds = [];
+                foreach ($invoiceLines as $line) {
+                    $tax = null;
+                
+                    // Fetch currency id based on name (e.g., 'USD')
+                    $productId = $models->execute_kw($db, $uid, $password, 'product.product', 'search', [[['x_uuid', '=', $line['product_id']]]]);
+                    $productId = $productId[0] ?? false;
+
+                    if($line['tax']){
+                        $tax =  $models->execute_kw($db, $uid, $password, 'account.tax', 'search', [[['type_tax_use', '=', 'sale'], ['company_id', '=', intval($companyId)]]]);
+                        // echo('TAXID:'.$tax[0]);
+                    }
+
+                    $invoiceLineIds[] = [0, false, [
+                        'product_id' => $productId,
+                        'name' => $line['name'] ?? false,
+                        'quantity' => $line['quantity'],
+                        'price_unit' => $line['price']/100 ?? false,
+                        'account_id' => $accountId,
+                        'tax_ids' => [$tax[0]]
+                    ]];
+                }
+
+                $invoiceData = [
+                    'x_uuid' => $uuid,
+                    'name' => $invoiceNumber,
+                    'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format) //default to today's date if not set
+                    'invoice_date_due' =>  $invoiceDateDue,
+                    'company_id' => intval($companyId), // Company associated with the invoice
+                    'company_currency_id' => $currencyId,
+                    'currency_id' => $currencyId, // Currency used in the invoice
+                    'invoice_payment_term_id' => $paymentTerm, //payment terms
+                    'invoice_line_ids' => $invoiceLineIds
+                ];
+                //update created invoice with journal details
+                $newInvoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$invoiceId],$invoiceData]);
+        
+                $response = [ 'status' => 'success', 'is_updated' => $newInvoiceId ];
+                // echo json_encode($response);
+                
+                //POST drafted invoice if information provided is valid
+                if ($newInvoiceId) {
+                    $postedInvoice = $models->execute_kw($db, $uid, $password, 'account.move', 'action_post', [$invoiceId]);
+        
+                    $response = [ 'status' => 'success', 'invoice' => $postedInvoice ];
+                    return $response;
+                }
+            }
+        } catch (Exception $e) {
+            // Output the error
+            header('Content-Type: application/json', true, 500);
+            echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+        }
+    }
+
     // Function to create a contact
     function createContact($contactData) {
          try {
@@ -278,6 +392,175 @@
 
     }
 
+    // Function to create a vendor
+    function createVendor($contactData) {
+        try {
+
+           // Extract invoice fields from the JSON data
+           $uuid = $contactData['uuid'];
+           $name = $contactData['name'];
+           $email = $contactData['email'];
+           $phone = $contactData['phone'];
+           $company = $contactData['company_uuid'];
+
+           include_once('include/connection/odoo_db.php');
+           require_once('include/ripcord/ripcord.php');
+
+           $common = ripcord::client("$url/xmlrpc/2/common");
+           // authenicate user
+           $uid = $common->authenticate($db, $username, $password, array());
+
+           // connect to odoo models
+           $models = ripcord::client("$url/xmlrpc/2/object");
+
+           // Fetch company id based on VM UUID
+           $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $company]]]);
+           $companyId = $companyId[0] ?? false;
+
+           $itemData = 
+                   [[
+                       'x_uuid' => $uuid,
+                       'name' => $name,
+                       'phone'  => $phone, //area code required
+                       'email'  => $email,
+                       'company_id' => $companyId,
+                       'is_company' => true
+                   ]];
+
+           $new_id = $models->execute_kw($db, $uid, $password, 'res.partner', 'create', $itemData); 
+
+            //Create product with vendor details
+            $productCode = generateCode($name, $companyId);
+            $productData = [
+                'x_uuid' => $uuid, // Name of the product
+                'name' => $name, // Name of the product
+                'type' => 'service', // Type of the product (e.g., 'product', 'service')
+                'list_price' => 1, // Sales price of the product
+                'default_code' => $productCode, // Unique code or reference for the product
+                'categ_id' => 3, // Category of the product (optional) - default - All
+                'company_id' => intval($companyId), // Company associated with the product (optional); Admin user only can apply associated ID
+                'taxes_id' => [], // Tax applied to product
+                'supplier_taxes_id' => [] //Vender tax applied to product
+                
+            ];
+                
+            $newProductId = $models->execute_kw($db, $uid, $password, 'product.product', 'create', [$productData]);
+            
+            $response = [ 'status' => 'success', 'product_id' => $newProductId, 'vendor_id' => $new_id];
+
+
+           return $response;
+
+       } catch (Exception $e) {
+           // Output the error
+           header('Content-Type: application/json', true, 500);
+           echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+       }
+
+   }
+
+    // Function to update a contact
+    function updateContact($contactData) {
+        try {
+
+           // Extract invoice fields from the JSON data
+           $uuid = $contactData['uuid'];
+           $name = $contactData['name'];
+           $email = $contactData['email'];
+           $phone = $contactData['phone'];
+           $company = $contactData['company_uuid'];
+
+           include_once('include/connection/odoo_db.php');
+           require_once('include/ripcord/ripcord.php');
+
+           $common = ripcord::client("$url/xmlrpc/2/common");
+           // authenicate user
+           $uid = $common->authenticate($db, $username, $password, array());
+
+           // connect to odoo models
+           $models = ripcord::client("$url/xmlrpc/2/object");
+
+           // Fetch company id based on VM UUID
+           $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $company]]]);
+           $companyId = $companyId[0] ?? false;
+
+           // Fetch partner data based on VM UUID
+           $partnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'search', [[['x_uuid', '=', $uuid]]]);
+           $partnerId = $partnerId[0] ?? false;
+
+           $itemData = 
+                   [
+                       'x_uuid' => $uuid,
+                       'name' => $name,
+                       'phone'  => $phone, //area code required
+                       'email'  => $email,
+                       'company_id' => $companyId,
+                       'is_company' => false
+                   ];
+
+           $updated_id = $models->execute_kw($db, $uid, $password, 'res.partner', 'write', [[$partnerId], $itemData]); 
+           $response = [ 'status' => 'success', 'contact_updated' => $updated_id];
+           return $response;
+
+       } catch (Exception $e) {
+           // Output the error
+           header('Content-Type: application/json', true, 500);
+           echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+       }
+
+   }
+
+    // Function to update a vendor
+    function updateVendor($contactData) {
+        try {
+
+           // Extract invoice fields from the JSON data
+           $uuid = $contactData['uuid'];
+           $name = $contactData['name'];
+           $email = $contactData['email'];
+           $phone = $contactData['phone'];
+           $company = $contactData['company_uuid'];
+
+           include_once('include/connection/odoo_db.php');
+           require_once('include/ripcord/ripcord.php');
+
+           $common = ripcord::client("$url/xmlrpc/2/common");
+           // authenicate user
+           $uid = $common->authenticate($db, $username, $password, array());
+
+           // connect to odoo models
+           $models = ripcord::client("$url/xmlrpc/2/object");
+
+           // Fetch company id based on VM UUID
+           $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $company]]]);
+           $companyId = $companyId[0] ?? false;
+
+           // Fetch partner data based on VM UUID
+           $partnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'search', [[['x_uuid', '=', $uuid]]]);
+           $partnerId = $partnerId[0] ?? false;
+
+           $itemData = 
+                   [
+                       'x_uuid' => $uuid,
+                       'name' => $name,
+                       'phone'  => $phone, //area code required
+                       'email'  => $email,
+                       'company_id' => $companyId,
+                       'is_company' => true
+                   ];
+
+           $updated_id = $models->execute_kw($db, $uid, $password, 'res.partner', 'write', [[$partnerId], $itemData]); 
+           $response = [ 'status' => 'success', 'contact_updated' => $updated_id];
+           return $response;
+
+       } catch (Exception $e) {
+           // Output the error
+           header('Content-Type: application/json', true, 500);
+           echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+       }
+
+   }
+
     // Function to create an invoice payment
     function invoicePayment($paymentInfo) {
         try {
@@ -305,7 +588,8 @@
             $companyId = json_encode($companyId);
             //   echo ($companyId);
             
-             $journalId = $models->execute_kw($db, $uid, $password, 'account.journal', 'search', [[['code', '=', 'BNK1'], ['company_id', '=', intval($companyId)]]]);
+            $getJournal = (intval($paymentMethodId) == 1) ? 'CSH1' : 'BNK1';
+             $journalId = $models->execute_kw($db, $uid, $password, 'account.journal', 'search', [[['code', '=', $getJournal], ['company_id', '=', intval($companyId)]]]);
              $journalId = json_encode($journalId[0]);
         
               // Fetch invoice ID based on invoice number (e.g., 'INV/2023/00055')
@@ -354,9 +638,9 @@
             //posted fields
             $customerId = $billInfo['customer_id'];
             $invoiceDate = $billInfo['bill_date'];
+            $invoiceDateDue = $billInfo['invoice_date_due'];
             $accountId = $billInfo['accountId'] ?? 26;
             $invoiceNumber = $billInfo['reference'];
-            $paymentTerm = $billInfo['payment_term'];
             $currency = $billInfo['currency'];
             $invoiceLines = $billInfo['invoice_lines'];
 
@@ -424,7 +708,7 @@
                         // 'name' => 'BILL/2023/06/0022',
                         //'partner_id' => $partnerId, // ID of the customer or partner
                         'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format)
-                        'invoice_payment_term_id' => $paymentTerm,
+                        'invoice_due_date' => $invoiceDateDue,
                         'currency_id' => $currencyId,
                         'ref' => $invoiceNumber,
                         'invoice_line_ids' => $invoiceLineIds,

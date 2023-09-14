@@ -213,6 +213,19 @@
                     echo json_encode($response, JSON_PRETTY_PRINT);
                     break;
                 
+                case 'vendor':
+                    $postData = file_get_contents('php://input');
+                    $contactData = json_decode($postData, true);
+                    $response = createVendor($contactData);
+                    echo json_encode($response, JSON_PRETTY_PRINT);
+                    break;
+
+                case 'updatecontact':
+                    $postData = file_get_contents('php://input');
+                    $contactData = json_decode($postData, true);
+                    $response = updateContact($contactData);
+                    echo json_encode($response, JSON_PRETTY_PRINT);
+                    break;
                 case 'product':
                     $postData = file_get_contents('php://input');
                     $productData = json_decode($postData, true);
@@ -245,6 +258,8 @@
                     $response = createPaymentTerms($paymentTermsData);
                     echo json_encode($response, JSON_PRETTY_PRINT);
                     break;
+                
+                
                 case 'loadcompanies':
                     loadCompanies($apiUrl);
                     break;
