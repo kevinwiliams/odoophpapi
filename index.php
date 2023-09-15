@@ -226,6 +226,12 @@
                     $response = updateContact($contactData);
                     echo json_encode($response, JSON_PRETTY_PRINT);
                     break;
+                case 'updateinv':
+                    $postData = file_get_contents('php://input');
+                    $invoiceInfo = json_decode($postData, true);
+                    $response = updateInvoice($invoiceInfo);
+                    echo json_encode($response, JSON_PRETTY_PRINT);
+                    break;
                 case 'product':
                     $postData = file_get_contents('php://input');
                     $productData = json_decode($postData, true);
@@ -244,6 +250,12 @@
                     $postData = file_get_contents('php://input');
                     $paymentInfo = json_decode($postData, true);
                     $response = invoicePayment($paymentInfo);
+                    echo json_encode($response, JSON_PRETTY_PRINT);
+                    break;
+                case 'paybill':
+                    $postData = file_get_contents('php://input');
+                    $paymentInfo = json_decode($postData, true);
+                    $response = billPayment($paymentInfo);
                     echo json_encode($response, JSON_PRETTY_PRINT);
                     break;
                 case 'paymentmethod':
