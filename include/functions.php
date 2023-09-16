@@ -350,6 +350,59 @@
         }
     }
 
+    // Function to reverse an invoice
+    function reverseInvoice($invoiceInfo){
+        try {
+            //posted fields
+            $uuid = $invoiceInfo['inv_uuid'] ?? false;
+            $company_uuid = $invoiceInfo['company_id'];
+            $reverse_reason = $invoiceInfo['reason'];
+
+            //connect to odoo
+            include('include/connection/odoo_db.php');
+            require_once('include/ripcord/ripcord.php');
+            $common = ripcord::client("$url/xmlrpc/2/common");
+            $uid = $common->authenticate($db, $username, $password, array());
+
+            //load odoo models
+            $models = ripcord::client("$url/xmlrpc/2/object");
+            //get invoice ID
+            $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['x_uuid', '=', $uuid]]]);
+
+            // Fetch company id based on VM UUID
+            $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $company_uuid]]]);
+            $companyId = $companyId[0] ?? false;
+            // Get journal ID 
+            $journalId = $models->execute_kw($db, $uid, $password, 'account.journal', 'search', [[['code', '=', 'INV'], ['company_id', '=', intval($companyId)]]]);
+            $journalId = json_encode($journalId[0]);
+
+            $reverseData = [
+                // 'date' => '2023-09-16', // Date of the invoice (YYYY-MM-DD format) //default to today's date if not set
+                'date_mode' =>  'custom',
+                'company_id' => $companyId,
+                'journal_id' => intval($journalId), // Company associated with the invoice
+                'reason' => $reverse_reason,
+                'refund_method' => 'cancel', // Currency used in the invoice
+                'move_ids' => [[6, false, [$invoiceId[0]]]]
+            ];
+
+            //create reversal entry
+            $reversalId = $models->execute_kw($db, $uid, $password, 'account.move.reversal', 'create', [$reverseData]);
+
+            //reverse invoice
+            $reversal = $models->execute_kw($db, $uid, $password, 'account.move.reversal', 'reverse_moves', [$reversalId]);
+    
+            $response = [ 'status' => 'success', 'is_reversed' => $reversal ];
+            echo json_encode($response);
+
+
+        } catch (Exception $e) {
+           // Output the error
+           header('Content-Type: application/json', true, 500);
+           echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+        }
+    }
+
     // Function to create a contact
     function createContact($contactData) {
          try {
@@ -649,7 +702,7 @@
             $models = ripcord::client("$url/xmlrpc/2/object"); 
            
             //posted fields
-            $customerId = $paymentInfo['customer_id'];
+            $customerId = $paymentInfo['vendor_id'];
             $paymentDate = $paymentInfo['payment_date'];
             $amount = $paymentInfo['amount'];
             $paymentMethodId = $paymentInfo['payment_method'];

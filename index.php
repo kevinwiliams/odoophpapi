@@ -232,6 +232,12 @@
                     $response = updateInvoice($invoiceInfo);
                     echo json_encode($response, JSON_PRETTY_PRINT);
                     break;
+                case 'reverseinv':
+                    $postData = file_get_contents('php://input');
+                    $invoiceInfo = json_decode($postData, true);
+                    $response = reverseInvoice($invoiceInfo);
+                    echo json_encode($response, JSON_PRETTY_PRINT);
+                    break;
                 case 'product':
                     $postData = file_get_contents('php://input');
                     $productData = json_decode($postData, true);
