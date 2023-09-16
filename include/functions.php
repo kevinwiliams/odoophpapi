@@ -254,14 +254,27 @@
             $models = ripcord::client("$url/xmlrpc/2/object");
 
             //search for invoice ID by uuid (search_read)
-            //$models->execute_kw($db, $uid, $password, 'res.partner', 'read', array($ids), array('fields'=>array('name', 'country_id', 'comment')));
-            //draft invoice by invoice ID  : action "button_draft" , model "account.move"
-            //"read" w/ invoice ID to pull invoice_lines : action: "read", model:  "account.move"
-            //remove invoice line_items from "account.move.line"
-            //$models->execute_kw($db, $uid, $password, 'res.partner', 'unlink', array(array($id)));
-            //
+            $postedInvoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['x_uuid', '=', $uuid]]]);
+             // Create a new draft invoice based on the posted invoice
+            $draftInvoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'copy', [$postedInvoiceId], ['context' => ['default_move_type' => 'out_invoice']]);
+            // echo json_encode($draftInvoiceId);
 
+            //draft and remove old invoice
+            $models->execute_kw($db, $uid, $password, 'account.move', 'button_draft', [[$postedInvoiceId[0]]]);
+            $models->execute_kw($db, $uid, $password, 'account.move', 'unlink', [[$postedInvoiceId[0]]]);
+            // echo json_encode($draftOldInvoice);
 
+            $invoiceData = $models->execute_kw($db, $uid, $password, 'account.move', 'read', [$draftInvoiceId], ['fields' => ['invoice_line_ids']]);
+            $line_ids = $invoiceData[0]['invoice_line_ids'];
+
+            $old_line_ids = [];
+            foreach ($line_ids as $line) {
+                $old_line_ids[] = [2, $line, false]; 
+            }
+
+            // Remove the line item from the invoice.
+            $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$draftInvoiceId], [ 'invoice_line_ids' => $old_line_ids]]);
+            // echo json_encode($updatedInvoice);
 
             // Fetch company id based on VM UUID
             $partnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'search', [[['x_uuid', '=', $customer_uuid]]]);
@@ -278,65 +291,58 @@
             $accountId = $accountId[0] ?? false;
             // echo 'ACID:'.($accountId);
             
-            //create invoice with associated partner_id/customer
-            $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'create', [['move_type' => 'out_invoice', 'partner_id' => $partnerId, 'company_id' => intval($companyId)]]); 
-            $response = [ 'status' => 'success', 'id_created' => $invoiceId ];
             // echo json_encode($response);
 
-            //if ID is created 
-            if (is_int($invoiceId)) {
+            // Fetch currency id based on name (e.g., 'USD')
+            $currencyId = $models->execute_kw($db, $uid, $password, 'res.currency', 'search', [[['name', '=', $currency]]]);
+            $currencyId = $currencyId[0] ?? false;
+            //invoice data
+            $invoiceLineIds = [];
+            foreach ($invoiceLines as $line) {
+                $tax = null;
+            
                 // Fetch currency id based on name (e.g., 'USD')
-                $currencyId = $models->execute_kw($db, $uid, $password, 'res.currency', 'search', [[['name', '=', $currency]]]);
-                $currencyId = $currencyId[0] ?? false;
-                //invoice data
-                $invoiceLineIds = [];
-                foreach ($invoiceLines as $line) {
-                    $tax = null;
-                
-                    // Fetch currency id based on name (e.g., 'USD')
-                    $productId = $models->execute_kw($db, $uid, $password, 'product.product', 'search', [[['x_uuid', '=', $line['product_id']]]]);
-                    $productId = $productId[0] ?? false;
+                $productId = $models->execute_kw($db, $uid, $password, 'product.product', 'search', [[['x_uuid', '=', $line['product_id']]]]);
+                $productId = $productId[0] ?? false;
 
-                    if($line['tax']){
-                        $tax =  $models->execute_kw($db, $uid, $password, 'account.tax', 'search', [[['type_tax_use', '=', 'sale'], ['company_id', '=', intval($companyId)]]]);
-                        // echo('TAXID:'.$tax[0]);
-                    }
-
-                    $invoiceLineIds[] = [0, false, [
-                        'product_id' => $productId,
-                        'name' => $line['name'] ?? false,
-                        'quantity' => $line['quantity'],
-                        'price_unit' => $line['price']/100 ?? false,
-                        'account_id' => $accountId,
-                        'tax_ids' => [$tax[0]]
-                    ]];
+                if($line['tax']){
+                    $tax =  $models->execute_kw($db, $uid, $password, 'account.tax', 'search', [[['type_tax_use', '=', 'sale'], ['company_id', '=', intval($companyId)]]]);
+                    //echo('co: '.$companyId.' TAXID:'.json_encode($tax));
                 }
 
-                $invoiceData = [
-                    'x_uuid' => $uuid,
-                    'name' => $invoiceNumber,
-                    'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format) //default to today's date if not set
-                    'invoice_date_due' =>  $invoiceDateDue,
-                    'company_id' => intval($companyId), // Company associated with the invoice
-                    'company_currency_id' => $currencyId,
-                    'currency_id' => $currencyId, // Currency used in the invoice
-                    'invoice_payment_term_id' => $paymentTerm, //payment terms
-                    'invoice_line_ids' => $invoiceLineIds
-                ];
-                //update created invoice with journal details
-                $newInvoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$invoiceId],$invoiceData]);
-        
-                $response = [ 'status' => 'success', 'is_updated' => $newInvoiceId ];
-                // echo json_encode($response);
-                
-                //POST drafted invoice if information provided is valid
-                if ($newInvoiceId) {
-                    $postedInvoice = $models->execute_kw($db, $uid, $password, 'account.move', 'action_post', [$invoiceId]);
-        
-                    $response = [ 'status' => 'success', 'invoice' => $postedInvoice ];
-                    return $response;
-                }
+                $invoiceLineIds[] = [0, false, [
+                    'product_id' => $productId,
+                    'name' => $line['name'] ?? false,
+                    'quantity' => $line['quantity'],
+                    'price_unit' => $line['price']/100 ?? false,
+                    'account_id' => $accountId,
+                    'tax_ids' => [$tax[0]]
+                ]];
             }
+            $invoiceData = [
+                'x_uuid' => $uuid,
+                'name' => $invoiceNumber,
+                'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format) //default to today's date if not set
+                'invoice_date_due' =>  $invoiceDateDue,
+                'company_id' => intval($companyId), // Company associated with the invoice
+                'company_currency_id' => $currencyId,
+                'currency_id' => $currencyId, // Currency used in the invoice
+                'invoice_line_ids' => $invoiceLineIds
+            ];
+            //update created invoice with journal details
+            $newInvoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$draftInvoiceId],$invoiceData]);
+    
+            $response = [ 'status' => 'success', 'is_updated' => $newInvoiceId ];
+            echo json_encode($response);
+            
+            //POST drafted invoice if information provided is valid
+            if ($newInvoiceId) {
+                $postedInvoice = $models->execute_kw($db, $uid, $password, 'account.move', 'action_post', [$draftInvoiceId]);
+    
+                $response = [ 'status' => 'success', 'invoice' => $postedInvoice ];
+                return $response;
+            }
+          
         } catch (Exception $e) {
             // Output the error
             header('Content-Type: application/json', true, 500);
