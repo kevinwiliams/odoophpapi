@@ -230,7 +230,7 @@
         }
     }
 
-    // Function to create an invoice
+    // Function to update an invoice
     function updateInvoice($invoiceInfo) {
         try {
 
@@ -340,6 +340,122 @@
                 $postedInvoice = $models->execute_kw($db, $uid, $password, 'account.move', 'action_post', [$draftInvoiceId]);
     
                 $response = [ 'status' => 'success', 'invoice' => $postedInvoice ];
+                return $response;
+            }
+          
+        } catch (Exception $e) {
+            // Output the error
+            header('Content-Type: application/json', true, 500);
+            echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+        }
+    }
+
+    // Function to update an invoice
+    function updateExpense($billInfo) {
+        try {
+
+            //posted fields
+            $invoiceNumber = $billInfo['name'] ?? false;
+            $vendor_id = $billInfo['vendor_id'];
+            $invoiceDate = $billInfo['bill_date'];
+            $invoiceDateDue = $billInfo['invoice_date_due'];
+            $currency = $billInfo['currency'] ?? 'JMD';
+            $invoiceLines = $billInfo['invoice_lines'];
+                //connect to odoo
+            include('include/connection/odoo_db.php');
+            require_once('include/ripcord/ripcord.php');
+            $common = ripcord::client("$url/xmlrpc/2/common");
+            $uid = $common->authenticate($db, $username, $password, array());
+
+            //load odoo models
+            $models = ripcord::client("$url/xmlrpc/2/object");
+
+            //search for invoice ID by uuid (search_read)
+            $postedBillId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['ref', '=', $invoiceNumber]]]);
+            // echo json_encode($postedBillId);
+
+            // Create a new draft invoice based on the posted invoice
+            $draftBillId = $models->execute_kw($db, $uid, $password, 'account.move', 'copy', [$postedBillId], ['context' => ['default_move_type' => 'in_invoice']]);
+            // echo json_encode($draftBillId);
+            // exit;
+            //draft and remove old invoice
+            $models->execute_kw($db, $uid, $password, 'account.move', 'button_draft', [[$postedBillId[0]]]);
+            $models->execute_kw($db, $uid, $password, 'account.move', 'unlink', [[$postedBillId[0]]]);
+            // echo json_encode($draftOldInvoice);
+
+            $invoiceData = $models->execute_kw($db, $uid, $password, 'account.move', 'read', [$draftBillId], ['fields' => ['invoice_line_ids']]);
+            // echo json_encode($invoiceData);
+            // exit;
+            $line_ids = $invoiceData[0]['invoice_line_ids'];
+
+            $old_line_ids = [];
+            foreach ($line_ids as $line) {
+                $old_line_ids[] = [2, $line, false]; 
+            }
+
+            // Remove the line item from the invoice.
+            $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$draftBillId], [ 'invoice_line_ids' => $old_line_ids]]);
+            // echo json_encode($updatedInvoice);
+            
+            $partnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'search', [[['x_uuid', '=', $vendor_id]]]);
+            $partnerId = $partnerId[0] ?? false;
+
+            $partnerData = $models->execute_kw($db, $uid, $password, 'res.partner', 'read', [$partnerId], ['fields' => ['company_id']]);
+            $companyId = $partnerData[0]['company_id'][0];
+            // $companyId = json_encode($companyId);
+        
+            $accountId = $models->execute_kw($db, $uid, $password, 'account.account', 'search', [[['name', '=', 'Expenses'], ['company_id', '=', $companyId]]]);
+            $accountId = $accountId[0] ?? false;
+
+            // echo json_encode($response);
+
+            // Fetch currency id based on name (e.g., 'USD')
+            $currencyId = $models->execute_kw($db, $uid, $password, 'res.currency', 'search', [[['name', '=', $currency]]]);
+            $currencyId = $currencyId[0] ?? false;
+            //invoice data
+            $invoiceLineIds = [];
+            foreach ($invoiceLines as $line) {
+                $tax = null;
+            
+                // Fetch currency id based on name (e.g., 'USD')
+                $productId = $models->execute_kw($db, $uid, $password, 'product.product', 'search', [[['x_uuid', '=', $line['product_id']]]]);
+                $productId = $productId[0] ?? false;
+
+                if($line['tax']){
+                    $tax =  $models->execute_kw($db, $uid, $password, 'account.tax', 'search', [[['type_tax_use', '=', 'sale'], ['company_id', '=', intval($companyId)]]]);
+                    // echo('co: '.$companyId.' TAXID:'.json_encode($tax));
+                }
+
+                $invoiceLineIds[] = [0, false, [
+                    'product_id' => $productId,
+                    'name' => $line['name'] ?? false,
+                    'quantity' => $line['quantity'],
+                    'price_unit' => $line['price'] ?? false,
+                    'account_id' => $accountId,
+                    'tax_ids' => (!empty($tax)) ? [$tax[0]] : []
+                ]];
+            }
+            $billData = [
+                'name' => $invoiceNumber,
+                'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format)
+                'invoice_date_due' => $invoiceDateDue,
+                'currency_id' => $currencyId,
+                'ref' => $invoiceNumber,
+                'invoice_line_ids' => $invoiceLineIds,
+            ];
+
+            // echo json_encode($billData);
+            //update created invoice with journal details
+            $newBillId = $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$draftBillId],$billData]);
+    
+            $response = [ 'status' => 'success', 'is_updated' => $newBillId ];
+            // echo json_encode($response);
+            
+            //POST drafted invoice if information provided is valid
+            if ($newBillId) {
+                $postedBill = $models->execute_kw($db, $uid, $password, 'account.move', 'action_post', [$draftBillId]);
+    
+                $response = [ 'status' => 'success', 'bill' => $postedBill ];
                 return $response;
             }
           
@@ -765,7 +881,7 @@
         try {
             
             //posted fields
-            $customerId = $billInfo['customer_id'];
+            $customerId = $billInfo['vendor_id'];
             $invoiceDate = $billInfo['bill_date'];
             $invoiceDateDue = $billInfo['invoice_date_due'];
             $accountId = $billInfo['accountId'] ?? 26;
