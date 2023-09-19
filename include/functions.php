@@ -123,7 +123,10 @@
                // $updatedSettings = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'execute', [$configSettingsId]);
                // $response = [ 'status' => 'success', 'is_exe' => $updatedSettings];
                // echo json_encode($response, JSON_PRETTY_PRINT);
-           }
+           }else{
+            $response = ['status' => 'failed', 'company_id_created' => $newCompanyId['faultString']];
+            return $response;
+          }
 
            return $responseC;
 
@@ -523,11 +526,16 @@
             //create reversal entry
             $reversalId = $models->execute_kw($db, $uid, $password, 'account.move.reversal', 'create', [$reverseData]);
 
-            //reverse invoice
-            $reversal = $models->execute_kw($db, $uid, $password, 'account.move.reversal', 'reverse_moves', [$reversalId]);
-    
-            $response = [ 'status' => 'success', 'is_reversed' => $reversal ];
-            return $response;
+            if (is_int($reversalId)){
+                //reverse invoice
+                $reversal = $models->execute_kw($db, $uid, $password, 'account.move.reversal', 'reverse_moves', [$reversalId]);
+                $response = [ 'status' => 'success', 'is_reversed' => $reversal ];
+                return $response;
+            }else{
+                $response = ['status' => 'failed', 'is_reversed' => $reversalId['faultString']];
+                return $response;
+            }
+            
 
 
         } catch (Exception $e) {
@@ -578,12 +586,16 @@
             //create reversal entry
             $reversalId = $models->execute_kw($db, $uid, $password, 'account.move.reversal', 'create', [$reverseData]);
             // echo json_encode($reversalId);
-            //reverse invoice
-            $reversal = $models->execute_kw($db, $uid, $password, 'account.move.reversal', 'reverse_moves', [$reversalId]);
-            // echo json_encode($reversal);
+            if (is_int($reversalId)){
+                //reverse invoice
+                $reversal = $models->execute_kw($db, $uid, $password, 'account.move.reversal', 'reverse_moves', [$reversalId]);
+                $response = [ 'status' => 'success', 'is_reversed' => $reversal ];
+                return $response;
+            }else{
+                $response = ['status' => 'failed', 'is_reversed' => $reversalId['faultString']];
+                return $response;
+            }
             
-            $response = [ 'status' => 'success', 'is_reversed' => $reversal ];
-            return $response;
 
 
         } catch (Exception $e) {
@@ -1030,61 +1042,64 @@
             /***** BILL ******/
             if (is_int($billId)) {
 
-                    // Fetch currency id based on name (e.g., 'USD')
-                    $currencyId = $models->execute_kw($db, $uid, $password, 'res.currency', 'search', [[['name', '=', $currency]]]);
-                    $currencyId = $currencyId[0] ?? false;
+                // Fetch currency id based on name (e.g., 'USD')
+                $currencyId = $models->execute_kw($db, $uid, $password, 'res.currency', 'search', [[['name', '=', $currency]]]);
+                $currencyId = $currencyId[0] ?? false;
 
-                    $accountId = $models->execute_kw($db, $uid, $password, 'account.account', 'search', [[['name', '=', 'Expenses'], ['company_id', '=', intval($companyId)]]]);
-                    $accountId = $accountId[0] ?? false;
-                  
-                    //invoice lines
-                    $invoiceLineIds = [];
-                    foreach ($invoiceLines as $line) {
-                        $tax = [];
-                        if($line['tax']){
-                            $tax =  $models->execute_kw($db, $uid, $password, 'account.tax', 'search', [[['type_tax_use', '=', 'sale'], ['company_id', '=', intval($companyId)]]]);
-                            // echo('TAXID:'.$tax[0]);
-                        }
-                        // Fetch currency id based on name (e.g., 'USD')
-                        $productId = $models->execute_kw($db, $uid, $password, 'product.product', 'search', [[['x_uuid', '=', $line['product_id']]]]);
-                        $productId = $productId[0] ?? false;
-
-                        $invoiceLineIds[] = [0, false, [
-                            'product_id' => $productId,
-                            'name' => $line['name'] ?? false,
-                            'quantity' => $line['quantity'],
-                            'price_unit' => $line['price'] ?? false,
-                            'account_id' => $accountId,
-                            'tax_ids' => (!empty($tax)) ? [$tax[0]] : []
-                        ]];
+                $accountId = $models->execute_kw($db, $uid, $password, 'account.account', 'search', [[['name', '=', 'Expenses'], ['company_id', '=', intval($companyId)]]]);
+                $accountId = $accountId[0] ?? false;
+                
+                //invoice lines
+                $invoiceLineIds = [];
+                foreach ($invoiceLines as $line) {
+                    $tax = [];
+                    if($line['tax']){
+                        $tax =  $models->execute_kw($db, $uid, $password, 'account.tax', 'search', [[['type_tax_use', '=', 'sale'], ['company_id', '=', intval($companyId)]]]);
+                        // echo('TAXID:'.$tax[0]);
                     }
-                   
-                    $billData = [
-                        'name' => $invoiceNumber,
-                        'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format)
-                        'invoice_date_due' => $invoiceDateDue,
-                        'currency_id' => $currencyId,
-                        'ref' => $invoiceNumber,
-                        'invoice_line_ids' => $invoiceLineIds,
-                    ];
+                    // Fetch currency id based on name (e.g., 'USD')
+                    $productId = $models->execute_kw($db, $uid, $password, 'product.product', 'search', [[['x_uuid', '=', $line['product_id']]]]);
+                    $productId = $productId[0] ?? false;
 
-                    //update created bill with journal details
-                    $newBillId = $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$billId],$billData]);
+                    $invoiceLineIds[] = [0, false, [
+                        'product_id' => $productId,
+                        'name' => $line['name'] ?? false,
+                        'quantity' => $line['quantity'],
+                        'price_unit' => $line['price'] ?? false,
+                        'account_id' => $accountId,
+                        'tax_ids' => (!empty($tax)) ? [$tax[0]] : []
+                    ]];
+                }
+                
+                $billData = [
+                    'name' => $invoiceNumber,
+                    'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format)
+                    'invoice_date_due' => $invoiceDateDue,
+                    'currency_id' => $currencyId,
+                    'ref' => $invoiceNumber,
+                    'invoice_line_ids' => $invoiceLineIds,
+                ];
 
-                    $response = [ 'status' => 'success', 'is_updated' => $newBillId ];
-                    // echo json_encode($response);
-                    
-                    //POST drafted bill if information provided is valid
-                    if ($newBillId) {
-                        $postedBill = $models->execute_kw($db, $uid, $password, 'account.move', 'action_post', [$billId]);
+                //update created bill with journal details
+                $newBillId = $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$billId],$billData]);
 
-                        $response = [ 'status' => 'success', 'bill' => $postedBill ];
-                        return $response;
-                    }else{
-                        $response = ['status' => 'failed', 'bill' => $newBillId['faultString']];
-                        return $response;
-                      }
+                $response = [ 'status' => 'success', 'is_updated' => $newBillId ];
+                // echo json_encode($response);
+                
+                //POST drafted bill if information provided is valid
+                if ($newBillId) {
+                    $postedBill = $models->execute_kw($db, $uid, $password, 'account.move', 'action_post', [$billId]);
+
+                    $response = [ 'status' => 'success', 'bill' => $postedBill ];
+                    return $response;
+                }else{
+                    $response = ['status' => 'failed', 'bill' => $newBillId['faultString']];
+                    return $response;
+                    }
             
+            }else{
+                $response = ['status' => 'failed', 'bill' => $billId['faultString']];
+                return $response;
             }
 
         } catch (Exception $e) {
@@ -1136,9 +1151,15 @@
             ];
                 
             $newProductId = $models->execute_kw($db, $uid, $password, 'product.product', 'create', [$productData]);
+
+            if (is_int($newProductId)) {
+                $response = [ 'status' => 'success', 'id_created' => $newProductId];
+                return $response;
+            }else{
+                $response = ['status' => 'failed', 'id_created' => $newProductId['faultString']];
+                return $response;
+            }
             
-            $response = [ 'status' => 'success', 'id_created' => $newProductId];
-            return $response;
 
         } catch (Exception $e) {
             // Output the error
@@ -1219,9 +1240,11 @@
         //POST drafted invoice if information provided is valid
         if ($newInvoiceId) {
             $postedInvoice = $models->execute_kw($db, $uid, $password, 'account.move', 'action_post', [$invoiceId]);
-
             $response = [ 'status' => 'success', 'invoice' => $postedInvoice ];
-            echo json_encode($response);
+            return $response;
+        }else{
+            $response = ['status' => 'failed', 'invoice' => $newInvoiceId['faultString']];
+            return $response;
         }
 
         return $invoiceId;
