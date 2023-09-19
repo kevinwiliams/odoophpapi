@@ -2,8 +2,16 @@
 
     // Function to generate maintenance code
     function generateCode($string, $endDigit) {
-        // Extract the first two characters of the string
-        $prefix = substr($string, 0, 2);
+        // Split the input string into words
+        $words = explode(' ', $string);
+    
+        // Initialize an empty prefix
+        $prefix = '';
+    
+        // Extract the first two letters from each word and concatenate them
+        foreach ($words as $word) {
+            $prefix .= substr($word, 0, 2);
+        }
     
         // Concatenate with the supplied end digit
         $code = strtoupper($prefix . str_pad($endDigit, 4, '0', STR_PAD_LEFT));
@@ -791,7 +799,30 @@
                    ];
 
            $updated_id = $models->execute_kw($db, $uid, $password, 'res.partner', 'write', [[$partnerId], $itemData]); 
-           $response = [ 'status' => 'success', 'contact_updated' => $updated_id];
+           $response = [ 'status' => 'success', 'vendor_updated' => $updated_id];
+            //update vendor product
+            $productId = $models->execute_kw($db, $uid, $password, 'product.product', 'search', [[['x_uuid', '=', $uuid]]]);
+           $productId = $productId[0] ?? false;
+
+           //Create product with vendor details
+           $productCode = generateCode($name, $companyId);
+           $productData = [
+               'x_uuid' => $uuid, // Name of the product
+               'name' => $name, // Name of the product
+               'type' => 'service', // Type of the product (e.g., 'product', 'service')
+               'list_price' => 1, // Sales price of the product
+               'default_code' => $productCode, // Unique code or reference for the product
+               'categ_id' => 3, // Category of the product (optional) - default - All
+               'company_id' => intval($companyId), // Company associated with the product (optional); Admin user only can apply associated ID
+               'taxes_id' => [], // Tax applied to product
+               'supplier_taxes_id' => [] //Vender tax applied to product
+               
+           ];
+
+           $updated_v_id = $models->execute_kw($db, $uid, $password, 'product.product', 'write', [[$productId], $productData]); 
+           $response = [ 'status' => 'success', 'vendor_prod_updated' => $updated_v_id, 'vendor_updated' => $updated_id];
+
+
            return $response;
 
        } catch (Exception $e) {

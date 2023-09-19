@@ -226,6 +226,12 @@
                     $response = updateContact($contactData);
                     echo json_encode($response, JSON_PRETTY_PRINT);
                     break;
+                case 'updatevendor':
+                    $postData = file_get_contents('php://input');
+                    $contactData = json_decode($postData, true);
+                    $response = updateVendor($contactData);
+                    echo json_encode($response, JSON_PRETTY_PRINT);
+                    break;
                 case 'updateinv':
                     $postData = file_get_contents('php://input');
                     $invoiceInfo = json_decode($postData, true);
