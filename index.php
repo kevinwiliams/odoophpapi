@@ -244,6 +244,12 @@
                     $response = reverseInvoice($invoiceInfo);
                     echo json_encode($response, JSON_PRETTY_PRINT);
                     break;
+                case 'reversebill':
+                    $postData = file_get_contents('php://input');
+                    $billInfo = json_decode($postData, true);
+                    $response = reverseExpense($billInfo);
+                    echo json_encode($response, JSON_PRETTY_PRINT);
+                    break;
                 case 'product':
                     $postData = file_get_contents('php://input');
                     $productData = json_decode($postData, true);

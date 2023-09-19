@@ -222,6 +222,10 @@
                     $response = [ 'status' => 'success', 'invoice' => $postedInvoice ];
                     return $response;
                 }
+                else{
+                    $response = ['status' => 'failed', 'invoice' => $newInvoiceId['faultString']];
+                    return $response;
+                  }
             }
         } catch (Exception $e) {
             // Output the error
@@ -341,7 +345,10 @@
     
                 $response = [ 'status' => 'success', 'invoice' => $postedInvoice ];
                 return $response;
-            }
+            } else{
+                $response = ['status' => 'failed', 'invoice' => $newInvoiceId['faultString']];
+                return $response;
+              }
           
         } catch (Exception $e) {
             // Output the error
@@ -457,7 +464,10 @@
     
                 $response = [ 'status' => 'success', 'bill' => $postedBill ];
                 return $response;
-            }
+            }else{
+                $response = ['status' => 'failed', 'bill' => $newBillId['faultString']];
+                return $response;
+              }
           
         } catch (Exception $e) {
             // Output the error
@@ -509,7 +519,63 @@
             $reversal = $models->execute_kw($db, $uid, $password, 'account.move.reversal', 'reverse_moves', [$reversalId]);
     
             $response = [ 'status' => 'success', 'is_reversed' => $reversal ];
-            echo json_encode($response);
+            return $response;
+
+
+        } catch (Exception $e) {
+           // Output the error
+           header('Content-Type: application/json', true, 500);
+           echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+        }
+    }
+
+    // Function to reverse an invoice
+    function reverseExpense($billInfo){
+        try {
+            //posted fields
+            $reference = $billInfo['reference'] ?? false;
+            $company_uuid = $billInfo['company_id'];
+            $reverse_reason = $billInfo['reason'];
+
+            //connect to odoo
+            include('include/connection/odoo_db.php');
+            require_once('include/ripcord/ripcord.php');
+            $common = ripcord::client("$url/xmlrpc/2/common");
+            $uid = $common->authenticate($db, $username, $password, array());
+
+            //load odoo models
+            $models = ripcord::client("$url/xmlrpc/2/object");
+            //get invoice ID
+            $billId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['ref', '=', $reference]]]);
+            // echo json_encode($billId);
+            // Fetch company id based on VM UUID
+            $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $company_uuid]]]);
+            $companyId = $companyId[0] ?? false;
+            // echo json_encode($companyId);
+            // Get journal ID 
+            $journalId = $models->execute_kw($db, $uid, $password, 'account.journal', 'search', [[['code', '=', 'BILL'], ['company_id', '=', intval($companyId)]]]);
+            $journalId = json_encode($journalId[0]);
+            // echo json_encode($journalId);
+
+            $reverseData = [
+                // 'date' => '2023-09-16', // Date of the invoice (YYYY-MM-DD format) //default to today's date if not set
+                'date_mode' =>  'custom',
+                'company_id' => $companyId,
+                'journal_id' => intval($journalId), // Company associated with the invoice
+                'reason' => $reverse_reason,
+                'refund_method' => 'cancel', // Currency used in the invoice
+                'move_ids' => [[6, false, [$billId[0]]]]
+            ];
+
+            //create reversal entry
+            $reversalId = $models->execute_kw($db, $uid, $password, 'account.move.reversal', 'create', [$reverseData]);
+            // echo json_encode($reversalId);
+            //reverse invoice
+            $reversal = $models->execute_kw($db, $uid, $password, 'account.move.reversal', 'reverse_moves', [$reversalId]);
+            // echo json_encode($reversal);
+            
+            $response = [ 'status' => 'success', 'is_reversed' => $reversal ];
+            return $response;
 
 
         } catch (Exception $e) {
@@ -798,6 +864,9 @@
                   $regPayment = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'action_create_payments', [$paymentRegisterId]);
                   $response = ['status' => 'success', 'payment_registered' => $regPayment,];
                 return $response;
+              }else{
+                $response = ['status' => 'failed', 'payment_created' => $paymentRegisterId['faultString']];
+                return $response;
               }
         } catch (Exception $e) {
             // Output the error
@@ -830,43 +899,47 @@
     
             $partnerData = $models->execute_kw($db, $uid, $password, 'res.partner', 'read', [$partnerId], ['fields' => ['company_id']]);
             $companyId = $partnerData[0]['company_id'][0];
-            $companyId = json_encode($companyId);
-            //   echo ($companyId);
             
             $getJournal = (intval($paymentMethodId) == 1) ? 'CSH1' : 'BNK1';
-             $journalId = $models->execute_kw($db, $uid, $password, 'account.journal', 'search', [[['code', '=', $getJournal], ['company_id', '=', intval($companyId)]]]);
-             $journalId = json_encode($journalId[0]);
+            $journalId = $models->execute_kw($db, $uid, $password, 'account.journal', 'search', [[['code', '=', $getJournal], ['company_id', '=', intval($companyId)]]]);
+            $journalId = json_encode($journalId[0]);
         
               // Fetch invoice ID based on invoice number (e.g., 'INV/2023/00055')
               $invoiceNum = $invoiceNumber;
-              $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['ref', '=', $invoiceNum]]], );
-              $invoiceId = $invoiceId[0] ?? false;
-              
-            //   echo ('inoviceId '. $invoiceId );
-              // exit;
-             
+              $billId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['ref', '=', $invoiceNum], ['move_type', '=', 'in_invoice']]], );
+              $billId = $billId[0] ?? false;
+
               $context = [
                   'active_model' => 'account.move',
-                  'active_ids' => $invoiceId,
+                  'active_ids' => [$billId],
               ];
               
               // Create the payment register record
               $paymentRegisterData = [
-                //   'company_id' => $companyId, // ID of the company associated
+                  'company_id' => intval($companyId), // ID of the company associated
                   'partner_id' => $partnerId, // ID of the customer or partner
                   'payment_date' => $paymentDate, // Date of the payment (YYYY-MM-DD format)
                   'journal_id' => intval($journalId),
                   'payment_method_line_id' => $paymentMethodId,
                   'amount' => $amount/100, // Amount of the payment
               ];
+
+
+              $models->execute_kw($db, $uid, $password, 'account.move', 'action_register_payment', [[$billId]]);
+            //   echo json_encode($registerPayment);
+
               $paymentRegisterId = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'create', [$paymentRegisterData], ['context' => $context]);
               $response = ['status' => 'success', 'payment_created' => $paymentRegisterId,];
-            //   echo json_encode($response);
+            //   echo json_encode($paymentRegisterId);
               
               // Create the payments based on the payment register
               if (is_int($paymentRegisterId)) {
                   $regPayment = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'action_create_payments', [$paymentRegisterId]);
-                  $response = ['status' => 'success', 'payment_registered' => $regPayment,];
+                  $response = ['status' => 'success', 'payment_registered' => $regPayment];
+                return $response;
+              }
+              else{
+                $response = ['status' => 'failed', 'payment_failed' => $paymentRegisterId['faultString']];
                 return $response;
               }
         } catch (Exception $e) {
@@ -976,7 +1049,10 @@
 
                         $response = [ 'status' => 'success', 'bill' => $postedBill ];
                         return $response;
-                    }
+                    }else{
+                        $response = ['status' => 'failed', 'bill' => $newBillId['faultString']];
+                        return $response;
+                      }
             
             }
 
@@ -1200,7 +1276,10 @@
 
             $response = [ 'status' => 'success', 'bill' => $postedBill ];
             return $response;
-        }
+        }else{
+            $response = ['status' => 'failed', 'bill' => $newBillId['faultString']];
+            return $response;
+          }
 
         return $billId;
 
@@ -1784,6 +1863,9 @@
                     if (is_int($paymentRegisterId)) {
                         $regPayment = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'action_create_payments', [$paymentRegisterId]);
                         $response = ['status' => 'success', 'payment_registered' => $regPayment,];
+                        return $response;
+                    }else{
+                        $response = ['status' => 'failed', 'payment_created' => $paymentRegisterId['faultString']];
                         return $response;
                     }
                 }
