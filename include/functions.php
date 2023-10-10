@@ -42,11 +42,6 @@
    
            //authenicate user
            $uid = $common->authenticate($db, $username, $password, array());
-           // if ($uid) {
-           //     echo 'Autheniticated';
-           // } else {
-           //     echo 'Not authenticated';
-           // }
    
            //connect to odoo models
            $models = ripcord::client("$url/xmlrpc/2/object");
@@ -65,9 +60,7 @@
                'phone' => $companyPhone,
                'currency_id' => intval($currenyId), // ID of the currency used in the company
                'account_fiscal_country_id' => $countryId, // ID of the country where the company is located
-               // 'chart_template_id' => 1, // Link the company to an account chart template (fiscal localization)
-               // // Other company data...
-               //journal
+   
            ];
            
            $newCompanyId = $models->execute_kw($db, $uid, $password, 'res.company', 'create', [$companyData]);
@@ -88,7 +81,6 @@
                // Configure fiscal period
                $settingsData = [
                    'company_id' => $newCompanyId,
-                   // 'chart_template_id' => 1, // Link the company to an account chart template (fiscal localization)
                    'fiscalyear_last_day' => $fiscalLastDay, // Last day of the fiscal year
                    'fiscalyear_last_month' => "12", // Last month of the fiscal year
                    'fiscalyear_lock_date' => $lockDate, // Lock date for fiscal year
@@ -1065,7 +1057,7 @@
                         'product_id' => $productId,
                         'name' => $line['name'] ?? false,
                         'quantity' => $line['quantity'],
-                        'price_unit' => $line['price'] ?? false,
+                        'price_unit' => $line['price']/100 ?? false,
                         'account_id' => $accountId,
                         'tax_ids' => (!empty($tax)) ? [$tax[0]] : []
                     ]];
