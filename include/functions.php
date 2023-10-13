@@ -440,7 +440,7 @@
                     'product_id' => $productId,
                     'name' => $line['name'] ?? false,
                     'quantity' => $line['quantity'],
-                    'price_unit' => $line['price'] ?? false,
+                    'price_unit' => $line['price']/100 ?? false,
                     'account_id' => $accountId,
                     'tax_ids' => (!empty($tax)) ? [$tax[0]] : []
                 ]];
