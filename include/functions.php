@@ -197,7 +197,7 @@
                         'quantity' => $line['quantity'],
                         'price_unit' => $line['price']/100 ?? false,
                         'account_id' => $accountId,
-                        'tax_ids' => [$tax[0]]
+                        'tax_ids' => (!empty($tax)) ? [$tax[0]] : []
                     ]];
                 }
 
@@ -323,7 +323,7 @@
                     'quantity' => $line['quantity'],
                     'price_unit' => $line['price']/100 ?? false,
                     'account_id' => $accountId,
-                    'tax_ids' => [$tax[0]]
+                    'tax_ids' => (!empty($tax)) ? [$tax[0]] : []
                 ]];
             }
             $invoiceData = [
