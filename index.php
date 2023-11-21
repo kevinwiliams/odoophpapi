@@ -77,6 +77,7 @@
         try {
             
             $endpoint = $_REQUEST['e'];
+            $uuid = $_REQUEST['u'] ?? false;
 
             switch ($endpoint) {
                 case 'contacts':
@@ -150,6 +151,14 @@
                                 join stratas s on s.id = e.property_id
                                 order by ep.id";
                     break;
+                case 'initinvoices':
+                    $query =    "select inv.id, s.strata_name, s.uuid company_id, inv.uuid inv_uuid, inv.invoice_number, inv.invoice_date, inv.due_date, i.uuid item_uuid, id.quantity, id.unit_cost_in_cents unit_cost, id.tax_rate, u.uuid customer_id from invoices inv
+                                join units u on inv.unit_id = u.id
+                                join stratas s on s.id = inv.strata_id
+                                join invoice_details id on id.invoice_id = inv.id
+                                join items i on i.id = id.item_id
+                                where s.uuid = '". $uuid ."'
+                                order by inv.id";
                 default:
                     $query =    "select u.uuid, concat(u.first_name, ' ', u.last_name) name, u.email, u.contact_number phone, rt.key title, ur.is_active, s.uuid company_uuid, ur.strata_id company_id, s.strata_name, s.email_address, a.* 
                                 from user_roles ur
@@ -317,6 +326,11 @@
                     break;
                 case 'loadinvoices':
                     loadInvoices($apiUrl);
+                    break;
+                case 'loadinitinvoices':
+                    $postData = file_get_contents('php://input');
+                    $companyData = json_decode($postData, true);
+                    loadInitInvoices($apiUrl, $companyData);
                     break;
 
                 
