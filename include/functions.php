@@ -64,7 +64,7 @@
            ];
            
            $newCompanyId = $models->execute_kw($db, $uid, $password, 'res.company', 'create', [$companyData]);
-           $responseC = [ 'status' => 'success', 'company_id_created' => $newCompanyId];
+           $responseC = [ 'statusCode' => 200, 'company_id_created' => $newCompanyId];
    
            if (is_int($newCompanyId)) {
                // Get the current year
@@ -87,7 +87,7 @@
                    // Other fiscal period configuration...
                ];
                $configSettingsId = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'create', [$settingsData]);
-               $response = [ 'status' => 'success', 'id_created' => $configSettingsId];
+               $response = [ 'statusCode' => 200, 'id_created' => $configSettingsId];
                // echo json_encode($response, JSON_PRETTY_PRINT);
    
                // Update the 'res.config.settings' record to apply fiscal localization
@@ -97,26 +97,26 @@
                        'chart_template_id' => $chartTemplateId, // Replace with the ID of the desired chart template
                    ],
                ]);
-               $response = [ 'status' => 'success', 'settings_updated' => $updateSettings];
+               $response = [ 'statusCode' => 200, 'settings_updated' => $updateSettings];
                // echo json_encode($response, JSON_PRETTY_PRINT);
    
                // Update the company's chart template
                // echo ' compID: '.$newCompanyId;
                // echo ' chartID: '.$chartTemplateId;
                // $applyChartTemp = $models->execute_kw($db, $uid, $password, 'res.company', 'write', [[$newCompanyId], ['chart_template_id' => $chartTemplateId]]);
-               // $response = ['status' => 'success', 'chart_template_applied' => $applyChartTemp];
+               // $response = ['statusCode' => 200, 'chart_template_applied' => $applyChartTemp];
                // echo json_encode($response, JSON_PRETTY_PRINT);
    
                // Apply fiscal localization and load chart of accounts
                $localizationApplied = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'execute', [$configSettingsId]);
-               $response = ['status' => 'success', 'localization_applied' => $localizationApplied];
+               $response = ['statusCode' => 200, 'localization_applied' => $localizationApplied];
                // echo json_encode($response, JSON_PRETTY_PRINT);
                
                // $updatedSettings = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'execute', [$configSettingsId]);
-               // $response = [ 'status' => 'success', 'is_exe' => $updatedSettings];
+               // $response = [ 'statusCode' => 200, 'is_exe' => $updatedSettings];
                // echo json_encode($response, JSON_PRETTY_PRINT);
            }else{
-            $response = ['status' => 'failed', 'company_id_created' => $newCompanyId['faultString']];
+            $response = ['statusCode' => 400, 'company_id_created' => $newCompanyId['faultString']];
             return $response;
           }
 
@@ -125,7 +125,7 @@
         } catch (Exception $e) {
             // Output the error
             header('Content-Type: application/json', true, 500);
-            echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+            echo json_encode(['statusCode' => 500, 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
         }
     }
 
@@ -169,7 +169,7 @@
             
             //create invoice with associated partner_id/customer
             $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'create', [['move_type' => 'out_invoice', 'partner_id' => $partnerId, 'company_id' => intval($companyId)]]); 
-            $response = [ 'status' => 'success', 'id_created' => $invoiceId ];
+            $response = [ 'statusCode' => 200, 'id_created' => $invoiceId ];
             // echo json_encode($response);
 
             //if ID is created 
@@ -215,25 +215,25 @@
                 //update created invoice with journal details
                 $newInvoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$invoiceId],$invoiceData]);
         
-                $response = [ 'status' => 'success', 'is_updated' => $newInvoiceId ];
+                $response = [ 'statusCode' => 200, 'is_updated' => $newInvoiceId ];
                 // echo json_encode($response);
                 
                 //POST drafted invoice if information provided is valid
                 if ($newInvoiceId) {
                     $postedInvoice = $models->execute_kw($db, $uid, $password, 'account.move', 'action_post', [$invoiceId]);
         
-                    $response = [ 'status' => 'success', 'invoice' => $postedInvoice ];
+                    $response = [ 'statusCode' => 200, 'invoice' => $postedInvoice ];
                     return $response;
                 }
                 else{
-                    $response = ['status' => 'failed', 'invoice' => $newInvoiceId['faultString']];
+                    $response = ['statusCode' => 400, 'invoice' => $newInvoiceId['faultString']];
                     return $response;
                   }
             }
         } catch (Exception $e) {
             // Output the error
             header('Content-Type: application/json', true, 500);
-            echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+            echo json_encode(['statusCode' => 500, 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
         }
     }
 
@@ -260,8 +260,19 @@
             //load odoo models
             $models = ripcord::client("$url/xmlrpc/2/object");
 
+            // Fetch company id based on VM UUID
+            $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $company_uuid]]]);
+            $companyId = $companyId[0] ?? false;
+            //    echo 'COMP:'.($companyId);
+
             //search for invoice ID by uuid (search_read)
-            $postedInvoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['x_uuid', '=', $uuid]]]);
+            $postedInvoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['x_uuid', '=', $uuid]]]); 
+            // $postedInvoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['name', '=', $invoiceNumber], ['company_id', '=', $companyId] ]]); 
+            
+            if (!is_int(($postedInvoiceId[0]))) {
+                $response = [ 'statusCode' => 400, 'posted_invoice' => $postedInvoiceId ];
+                return $response;
+            }
              // Create a new draft invoice based on the posted invoice
             $draftInvoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'copy', [$postedInvoiceId], ['context' => ['default_move_type' => 'out_invoice']]);
             // echo json_encode($draftInvoiceId);
@@ -287,11 +298,6 @@
             $partnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'search', [[['x_uuid', '=', $customer_uuid]]]);
             $partnerId = $partnerId[0] ?? false;
             //    echo 'PARTID:'.$partnerId;
-
-            // Fetch company id based on VM UUID
-            $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $company_uuid]]]);
-            $companyId = $companyId[0] ?? false;
-            //    echo 'COMP:'.($companyId);
 
             // Fetch account id based on VM UUID
             $accountId = $models->execute_kw($db, $uid, $password, 'account.account', 'search', [[['name', '=', 'Product Sales'], ['company_id', '=', intval($companyId)]]]);
@@ -339,24 +345,24 @@
             //update created invoice with journal details
             $newInvoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$draftInvoiceId],$invoiceData]);
     
-            $response = [ 'status' => 'success', 'is_updated' => $newInvoiceId ];
-            echo json_encode($response);
+            $response = [ 'statusCode' => 200, 'is_updated' => $newInvoiceId ];
+            // echo json_encode($response);
             
             //POST drafted invoice if information provided is valid
             if ($newInvoiceId) {
                 $postedInvoice = $models->execute_kw($db, $uid, $password, 'account.move', 'action_post', [$draftInvoiceId]);
     
-                $response = [ 'status' => 'success', 'invoice' => $postedInvoice ];
+                $response = [ 'statusCode' => 200, 'invoice' => $postedInvoice ];
                 return $response;
             } else{
-                $response = ['status' => 'failed', 'invoice' => $newInvoiceId['faultString']];
+                $response = ['statusCode' => 400, 'invoice' => $newInvoiceId['faultString']];
                 return $response;
               }
           
         } catch (Exception $e) {
             // Output the error
             header('Content-Type: application/json', true, 500);
-            echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+            echo json_encode(['statusCode' => 500, 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
         }
     }
 
@@ -365,6 +371,7 @@
         try {
 
             //posted fields
+            $uuid = $billInfo['bill_uuid'] ?? false;
             $invoiceNumber = $billInfo['name'] ?? false;
             $vendor_id = $billInfo['vendor_id'];
             $invoiceDate = $billInfo['bill_date'];
@@ -380,8 +387,21 @@
             //load odoo models
             $models = ripcord::client("$url/xmlrpc/2/object");
 
+            $partnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'search', [[['x_uuid', '=', $vendor_id]]]);
+            $partnerId = $partnerId[0] ?? false;
+
+            $partnerData = $models->execute_kw($db, $uid, $password, 'res.partner', 'read', [$partnerId], ['fields' => ['company_id']]);
+            $companyId = $partnerData[0]['company_id'][0];
+            // $companyId = json_encode($companyId);
+
             //search for invoice ID by uuid (search_read)
-            $postedBillId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['ref', '=', $invoiceNumber]]]);
+            $postedBillId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['ref', '=', $invoiceNumber], ['company_id', '=', $companyId]]]);
+            // $postedBillId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['x_uuid', '=', $uuid]]]);
+            
+            if(!is_int($postedBillId[0])){
+                $response = [ 'statusCode' => 400, 'bill' => $postedBillId ];
+                return $response;
+            }
             // echo json_encode($postedBillId);
 
             // Create a new draft invoice based on the posted invoice
@@ -407,12 +427,7 @@
             $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$draftBillId], [ 'invoice_line_ids' => $old_line_ids]]);
             // echo json_encode($updatedInvoice);
             
-            $partnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'search', [[['x_uuid', '=', $vendor_id]]]);
-            $partnerId = $partnerId[0] ?? false;
-
-            $partnerData = $models->execute_kw($db, $uid, $password, 'res.partner', 'read', [$partnerId], ['fields' => ['company_id']]);
-            $companyId = $partnerData[0]['company_id'][0];
-            // $companyId = json_encode($companyId);
+            
         
             $accountId = $models->execute_kw($db, $uid, $password, 'account.account', 'search', [[['name', '=', 'Expenses'], ['company_id', '=', $companyId]]]);
             $accountId = $accountId[0] ?? false;
@@ -446,6 +461,7 @@
                 ]];
             }
             $billData = [
+                'x_uuid' => $uuid,
                 'name' => $invoiceNumber,
                 'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format)
                 'invoice_date_due' => $invoiceDateDue,
@@ -458,24 +474,24 @@
             //update created invoice with journal details
             $newBillId = $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$draftBillId],$billData]);
     
-            $response = [ 'status' => 'success', 'is_updated' => $newBillId ];
+            $response = [ 'statusCode' => 200, 'is_updated' => $newBillId ];
             // echo json_encode($response);
             
             //POST drafted invoice if information provided is valid
             if ($newBillId) {
                 $postedBill = $models->execute_kw($db, $uid, $password, 'account.move', 'action_post', [$draftBillId]);
     
-                $response = [ 'status' => 'success', 'bill' => $postedBill ];
+                $response = [ 'statusCode' => 200, 'bill' => $postedBill ];
                 return $response;
             }else{
-                $response = ['status' => 'failed', 'bill' => $newBillId['faultString']];
+                $response = ['statusCode' => 400, 'bill' => $newBillId['faultString']];
                 return $response;
               }
           
         } catch (Exception $e) {
             // Output the error
             header('Content-Type: application/json', true, 500);
-            echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+            echo json_encode(['statusCode' => 500, 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
         }
     }
 
@@ -497,6 +513,11 @@
             $models = ripcord::client("$url/xmlrpc/2/object");
             //get invoice ID
             $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['x_uuid', '=', $uuid]]]);
+            
+            if(!is_int($invoiceId[0])){
+                $response = [ 'statusCode' => 400, 'invoice' => $invoiceId ];
+                return $response;
+            }
 
             // Fetch company id based on VM UUID
             $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $company_uuid]]]);
@@ -521,10 +542,10 @@
             if (is_int($reversalId)){
                 //reverse invoice
                 $reversal = $models->execute_kw($db, $uid, $password, 'account.move.reversal', 'reverse_moves', [$reversalId]);
-                $response = [ 'status' => 'success', 'is_reversed' => $reversal ];
+                $response = [ 'statusCode' => 200, 'is_reversed' => $reversal ];
                 return $response;
             }else{
-                $response = ['status' => 'failed', 'is_reversed' => $reversalId['faultString']];
+                $response = ['statusCode' => 400, 'is_reversed' => $reversalId['faultString']];
                 return $response;
             }
             
@@ -533,7 +554,7 @@
         } catch (Exception $e) {
            // Output the error
            header('Content-Type: application/json', true, 500);
-           echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+           echo json_encode(['statusCode' => 500, 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
         }
     }
 
@@ -553,13 +574,19 @@
 
             //load odoo models
             $models = ripcord::client("$url/xmlrpc/2/object");
+             // Fetch company id based on VM UUID
+             $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $company_uuid]]]);
+             $companyId = $companyId[0] ?? false;
+             // echo json_encode($companyId);
             //get invoice ID
-            $billId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['ref', '=', $reference]]]);
+            $billId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['ref', '=', $reference], ['company_id', '=', intval($companyId)]]]);
+
+            if(!is_int($billId[0])){
+                $response = [ 'statusCode' => 400, 'bill' => $billId ];
+                return $response;
+            }
             // echo json_encode($billId);
-            // Fetch company id based on VM UUID
-            $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $company_uuid]]]);
-            $companyId = $companyId[0] ?? false;
-            // echo json_encode($companyId);
+           
             // Get journal ID 
             $journalId = $models->execute_kw($db, $uid, $password, 'account.journal', 'search', [[['code', '=', 'BILL'], ['company_id', '=', intval($companyId)]]]);
             $journalId = json_encode($journalId[0]);
@@ -581,10 +608,10 @@
             if (is_int($reversalId)){
                 //reverse invoice
                 $reversal = $models->execute_kw($db, $uid, $password, 'account.move.reversal', 'reverse_moves', [$reversalId]);
-                $response = [ 'status' => 'success', 'is_reversed' => $reversal ];
+                $response = [ 'statusCode' => 200, 'is_reversed' => $reversal ];
                 return $response;
             }else{
-                $response = ['status' => 'failed', 'is_reversed' => $reversalId['faultString']];
+                $response = ['statusCode' => 400, 'is_reversed' => $reversalId['faultString']];
                 return $response;
             }
             
@@ -593,7 +620,7 @@
         } catch (Exception $e) {
            // Output the error
            header('Content-Type: application/json', true, 500);
-           echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+           echo json_encode(['statusCode' => 500, 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
         }
     }
 
@@ -634,13 +661,13 @@
                     ]];
 
             $new_id = $models->execute_kw($db, $uid, $password, 'res.partner', 'create', $itemData); 
-            $response = [ 'status' => 'success', 'id_created' => $new_id];
+            $response = [ 'statusCode' => 200, 'id_created' => $new_id];
             return $response;
 
         } catch (Exception $e) {
             // Output the error
             header('Content-Type: application/json', true, 500);
-            echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+            echo json_encode(['statusCode' => 500, 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
         }
 
     }
@@ -699,7 +726,7 @@
                 
             $newProductId = $models->execute_kw($db, $uid, $password, 'product.product', 'create', [$productData]);
             
-            $response = [ 'status' => 'success', 'product_id' => $newProductId, 'vendor_id' => $new_id];
+            $response = [ 'statusCode' => 200, 'product_id' => $newProductId, 'vendor_id' => $new_id];
 
 
            return $response;
@@ -707,7 +734,7 @@
        } catch (Exception $e) {
            // Output the error
            header('Content-Type: application/json', true, 500);
-           echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+           echo json_encode(['statusCode' => 500, 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
        }
 
    }
@@ -752,13 +779,13 @@
                    ];
 
            $updated_id = $models->execute_kw($db, $uid, $password, 'res.partner', 'write', [[$partnerId], $itemData]); 
-           $response = [ 'status' => 'success', 'contact_updated' => $updated_id];
+           $response = [ 'statusCode' => 200, 'contact_updated' => $updated_id];
            return $response;
 
        } catch (Exception $e) {
            // Output the error
            header('Content-Type: application/json', true, 500);
-           echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+           echo json_encode(['statusCode' => 500, 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
        }
 
    }
@@ -803,7 +830,7 @@
                    ];
 
            $updated_id = $models->execute_kw($db, $uid, $password, 'res.partner', 'write', [[$partnerId], $itemData]); 
-           $response = [ 'status' => 'success', 'vendor_updated' => $updated_id];
+           $response = [ 'statusCode' => 200, 'vendor_updated' => $updated_id];
             //update vendor product
             $productId = $models->execute_kw($db, $uid, $password, 'product.product', 'search', [[['x_uuid', '=', $uuid]]]);
            $productId = $productId[0] ?? false;
@@ -824,7 +851,7 @@
            ];
 
            $updated_v_id = $models->execute_kw($db, $uid, $password, 'product.product', 'write', [[$productId], $productData]); 
-           $response = [ 'status' => 'success', 'vendor_prod_updated' => $updated_v_id, 'vendor_updated' => $updated_id];
+           $response = [ 'statusCode' => 200, 'vendor_prod_updated' => $updated_v_id, 'vendor_updated' => $updated_id];
 
 
            return $response;
@@ -832,7 +859,7 @@
        } catch (Exception $e) {
            // Output the error
            header('Content-Type: application/json', true, 500);
-           echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+           echo json_encode(['statusCode' => 500, 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
        }
 
    }
@@ -852,61 +879,73 @@
             $customerId = $paymentInfo['customer_id'];
             $paymentDate = $paymentInfo['payment_date'];
             $amount = $paymentInfo['amount'];
-            $paymentMethodId = $paymentInfo['payment_method'];
+            $paymentMethod = $paymentInfo['payment_method'];
             $journalId = $paymentInfo['journalId'] ?? 8;
             $invoiceNumber = $paymentInfo['invoice_num'];
-    
+            $invoice_uuid = $paymentInfo['invoice_uuid'];
+            
             $partnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'search', [[['x_uuid', '=', $customerId]]]);
             $partnerId = $partnerId[0] ?? false;
-    
+            // echo (' Partner - '.$partnerId);
             $partnerData = $models->execute_kw($db, $uid, $password, 'res.partner', 'read', [$partnerId], ['fields' => ['company_id']]);
             $companyId = $partnerData[0]['company_id'][0];
             $companyId = json_encode($companyId);
-            //   echo ($companyId);
             
-            $getJournal = (intval($paymentMethodId) == 1) ? 'CSH1' : 'BNK1';
-             $journalId = $models->execute_kw($db, $uid, $password, 'account.journal', 'search', [[['code', '=', $getJournal], ['company_id', '=', intval($companyId)]]]);
-             $journalId = json_encode($journalId[0]);
-        
+            $getJournal = (intval($paymentMethod) == 1) ? 'CSH1' : 'BNK1';
+            $journalId = $models->execute_kw($db, $uid, $password, 'account.journal', 'search', [[['code', '=', $getJournal], ['company_id', '=', intval($companyId)]]]);
+            $journalId = json_encode($journalId[0]);
+            // echo ('journalId '. $journalId );
+            $paymentMethodId = $models->execute_kw($db, $uid, $password, 'account.payment.method.line', 'search', [[['payment_method_id', '=', intval($paymentMethod)], ['journal_id', '=', intval($journalId)]]]);
+            $paymentMethodId = json_encode($paymentMethodId[0]);
               // Fetch invoice ID based on invoice number (e.g., 'INV/2023/00055')
-              $invoiceNum = $invoiceNumber;
-              $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['payment_reference', '=', $invoiceNum]]], );
-              $invoiceId = $invoiceId[0] ?? false;
+            $invoiceNum = $invoiceNumber;
+            // $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['payment_reference', '=', $invoiceNum], ['company_id', '=', intval($companyId)]]]);
+            $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['x_uuid', '=', $invoice_uuid]]]);
+            $invoiceId = $invoiceId[0] ?? false;
               
-            //   echo ('inoviceId '. $invoiceId );
-              // exit;
+            if (!is_int($invoiceId)) {
+                $response = ['statusCode' => 400, 'invoice' => $invoiceId,];
+                return $response;
+            }
              
               $context = [
                   'active_model' => 'account.move',
-                  'active_ids' => $invoiceId,
+                  'active_id' => $invoiceId,
+                  'active_ids' => [$invoiceId],
+                  'allowed_company_ids' => [intval($companyId)]
               ];
               
               // Create the payment register record
               $paymentRegisterData = [
-                //   'company_id' => $companyId, // ID of the company associated
+                  'company_id' => $companyId, // ID of the company associated
                   'partner_id' => $partnerId, // ID of the customer or partner
                   'payment_date' => $paymentDate, // Date of the payment (YYYY-MM-DD format)
                   'journal_id' => intval($journalId),
                   'payment_method_line_id' => $paymentMethodId,
                   'amount' => $amount/100, // Amount of the payment
+                  'payment_type' => 'inbound',
+                  'partner_type' => 'customer'
               ];
+
               $paymentRegisterId = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'create', [$paymentRegisterData], ['context' => $context]);
-              $response = ['status' => 'success', 'payment_created' => $paymentRegisterId,];
-            //   echo json_encode($response);
+              $response = ['statusCode' => 200, 'payment_created' => $paymentRegisterId,];
+              echo json_encode($response);
               
               // Create the payments based on the payment register
               if (is_int($paymentRegisterId)) {
-                  $regPayment = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'action_create_payments', [$paymentRegisterId]);
-                  $response = ['status' => 'success', 'payment_registered' => $regPayment,];
+                $regPayment = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'action_create_payments', [[$paymentRegisterId]]);
+                $response = ['statusCode' => 200, 'payment_registered' => $regPayment,];
                 return $response;
-              }else{
-                $response = ['status' => 'failed', 'payment_created' => $paymentRegisterId['faultString']];
+
+              } else {
+                $response = ['statusCode' => 400, 'payment_created' => $paymentRegisterId['faultString']];
                 return $response;
               }
+
         } catch (Exception $e) {
             // Output the error
             header('Content-Type: application/json', true, 500);
-            echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+            echo json_encode(['statusCode' => 500, 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
         }
     }
 
@@ -922,10 +961,11 @@
             $models = ripcord::client("$url/xmlrpc/2/object"); 
            
             //posted fields
+            $uuid = $paymentInfo['bill_uuid'] ?? false;
             $customerId = $paymentInfo['vendor_id'];
             $paymentDate = $paymentInfo['payment_date'];
             $amount = $paymentInfo['amount'];
-            $paymentMethodId = $paymentInfo['payment_method'];
+            $paymentMethod = $paymentInfo['payment_method'];
             $journalId = $paymentInfo['journalId'] ?? 8;
             $invoiceNumber = $paymentInfo['invoice_num'];
     
@@ -935,14 +975,21 @@
             $partnerData = $models->execute_kw($db, $uid, $password, 'res.partner', 'read', [$partnerId], ['fields' => ['company_id']]);
             $companyId = $partnerData[0]['company_id'][0];
             
-            $getJournal = (intval($paymentMethodId) == 1) ? 'CSH1' : 'BNK1';
+            $getJournal = (intval($paymentMethod) == 1) ? 'CSH1' : 'BNK1';
             $journalId = $models->execute_kw($db, $uid, $password, 'account.journal', 'search', [[['code', '=', $getJournal], ['company_id', '=', intval($companyId)]]]);
             $journalId = json_encode($journalId[0]);
-        
+
+            $paymentMethodId = $models->execute_kw($db, $uid, $password, 'account.payment.method.line', 'search', [[['payment_method_id', '=', intval($paymentMethod)], ['journal_id', '=', intval($journalId)]]]);
+            $paymentMethodId = json_encode($paymentMethodId[0]);
               // Fetch invoice ID based on invoice number (e.g., 'INV/2023/00055')
               $invoiceNum = $invoiceNumber;
-              $billId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['ref', '=', $invoiceNum], ['move_type', '=', 'in_invoice']]], );
+              $billId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['ref', '=', $invoiceNum], ['move_type', '=', 'in_invoice'], ['company_id', '=', intval($companyId)]]], );
               $billId = $billId[0] ?? false;
+
+              if (!is_int($billId)) {
+                $response = ['statusCode' => 400, 'bill' => $billId,];
+                return $response;
+            }
 
               $context = [
                   'active_model' => 'account.move',
@@ -951,6 +998,7 @@
               
               // Create the payment register record
               $paymentRegisterData = [
+                  'x_uuid' => $uuid ?? false,
                   'company_id' => intval($companyId), // ID of the company associated
                   'partner_id' => $partnerId, // ID of the customer or partner
                   'payment_date' => $paymentDate, // Date of the payment (YYYY-MM-DD format)
@@ -964,23 +1012,24 @@
             //   echo json_encode($registerPayment);
 
               $paymentRegisterId = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'create', [$paymentRegisterData], ['context' => $context]);
-              $response = ['status' => 'success', 'payment_created' => $paymentRegisterId,];
+              $response = ['statusCode' => 200, 'payment_created' => $paymentRegisterId,];
             //   echo json_encode($paymentRegisterId);
               
               // Create the payments based on the payment register
               if (is_int($paymentRegisterId)) {
                   $regPayment = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'action_create_payments', [$paymentRegisterId]);
-                  $response = ['status' => 'success', 'payment_registered' => $regPayment];
+                  $response = ['statusCode' => 200, 'payment_registered' => $regPayment];
+                  
                 return $response;
               }
               else{
-                $response = ['status' => 'failed', 'payment_failed' => $paymentRegisterId['faultString']];
+                $response = ['statusCode' => 400, 'payment_failed' => $paymentRegisterId['faultString']];
                 return $response;
               }
         } catch (Exception $e) {
             // Output the error
             header('Content-Type: application/json', true, 500);
-            echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+            echo json_encode(['statusCode' => 500, 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
         }
     }
 
@@ -989,6 +1038,8 @@
         try {
             
             //posted fields
+
+            $uuid = $billInfo['bill_uuid'] ?? false;
             $customerId = $billInfo['vendor_id'];
             $invoiceDate = $billInfo['bill_date'];
             $invoiceDateDue = $billInfo['invoice_date_due'];
@@ -1028,7 +1079,7 @@
     
             // Create the bill
             $billId = $models->execute_kw($db, $uid, $password, 'account.move', 'create', [$billData]); 
-            $response = [ 'status' => 'success', 'id_created' => $billId ];
+            $response = [ 'statusCode' => 200, 'id_created' => $billId ];
             // echo json_encode($response);
 
             /***** BILL ******/
@@ -1064,6 +1115,7 @@
                 }
                 
                 $billData = [
+                    'x_uuid' => $uuid,
                     'name' => $invoiceNumber,
                     'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format)
                     'invoice_date_due' => $invoiceDateDue,
@@ -1075,29 +1127,29 @@
                 //update created bill with journal details
                 $newBillId = $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$billId],$billData]);
 
-                $response = [ 'status' => 'success', 'is_updated' => $newBillId ];
+                $response = [ 'statusCode' => 200, 'is_updated' => $newBillId ];
                 // echo json_encode($response);
                 
                 //POST drafted bill if information provided is valid
                 if ($newBillId) {
                     $postedBill = $models->execute_kw($db, $uid, $password, 'account.move', 'action_post', [$billId]);
 
-                    $response = [ 'status' => 'success', 'bill' => $postedBill ];
+                    $response = [ 'statusCode' => 200, 'bill' => $postedBill ];
                     return $response;
                 }else{
-                    $response = ['status' => 'failed', 'bill' => $newBillId['faultString']];
+                    $response = ['statusCode' => 400, 'bill' => $newBillId['faultString']];
                     return $response;
                     }
             
             }else{
-                $response = ['status' => 'failed', 'bill' => $billId['faultString']];
+                $response = ['statusCode' => 400, 'bill' => $billId['faultString']];
                 return $response;
             }
 
         } catch (Exception $e) {
             // Output the error
             header('Content-Type: application/json', true, 500);
-            echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+            echo json_encode(['statusCode' => 500, 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
         }
     }
 
@@ -1145,10 +1197,10 @@
             $newProductId = $models->execute_kw($db, $uid, $password, 'product.product', 'create', [$productData]);
 
             if (is_int($newProductId)) {
-                $response = [ 'status' => 'success', 'id_created' => $newProductId];
+                $response = [ 'statusCode' => 200, 'id_created' => $newProductId];
                 return $response;
             }else{
-                $response = ['status' => 'failed', 'id_created' => $newProductId['faultString']];
+                $response = ['statusCode' => 400, 'id_created' => $newProductId['faultString']];
                 return $response;
             }
             
@@ -1156,7 +1208,7 @@
         } catch (Exception $e) {
             // Output the error
             header('Content-Type: application/json', true, 500);
-            echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+            echo json_encode(['statusCode' => 500, 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
         }
     }
 ///////////////////     ///////////////      //////////////////////      /////////////////////       ////////////////
@@ -1226,16 +1278,16 @@
         // update created invoice with journal details
         $newInvoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$invoiceId],$invoiceData]);
 
-        $response = [ 'status' => 'success', 'is_updated' => $newInvoiceId ];
+        $response = [ 'statusCode' => 200, 'is_updated' => $newInvoiceId ];
         //echo json_encode($response);
         
         //POST drafted invoice if information provided is valid
         if ($newInvoiceId) {
             $postedInvoice = $models->execute_kw($db, $uid, $password, 'account.move', 'action_post', [$invoiceId]);
-            $response = [ 'status' => 'success', 'invoice' => $postedInvoice ];
+            $response = [ 'statusCode' => 200, 'invoice' => $postedInvoice ];
             return $response;
         }else{
-            $response = ['status' => 'failed', 'invoice' => $newInvoiceId['faultString']];
+            $response = ['statusCode' => 400, 'invoice' => $newInvoiceId['faultString']];
             return $response;
         }
 
@@ -1302,6 +1354,7 @@
 
         
         $billData = [
+            'x_uuid' => $uuid,
             'name' => $invoiceNumber,
             'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format)
             'invoice_date_due' =>  $invoiceDateDue,
@@ -1313,17 +1366,17 @@
         //update created bill with journal details
         $newBillId = $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$billId],$billData]);
 
-        $response = [ 'status' => 'success', 'is_updated' => $newBillId ];
+        $response = [ 'statusCode' => 200, 'is_updated' => $newBillId ];
         // echo json_encode($response);
         
         //POST drafted bill if information provided is valid
         if ($newBillId) {
             $postedBill = $models->execute_kw($db, $uid, $password, 'account.move', 'action_post', [$billId]);
 
-            $response = [ 'status' => 'success', 'bill' => $postedBill ];
+            $response = [ 'statusCode' => 200, 'bill' => $postedBill ];
             return $response;
         }else{
-            $response = ['status' => 'failed', 'bill' => $newBillId['faultString']];
+            $response = ['statusCode' => 400, 'bill' => $newBillId['faultString']];
             return $response;
           }
 
@@ -1396,7 +1449,7 @@
                 ];
                 
                 $newCompanyId = $models->execute_kw($db, $uid, $password, 'res.company', 'create', [$companyData]);
-                $response = [ 'status' => 'success', 'id_created' => $newCompanyId];
+                $response = [ 'statusCode' => 200, 'id_created' => $newCompanyId];
                 echo json_encode($response, JSON_PRETTY_PRINT);
 
                 if (is_int($newCompanyId)) {
@@ -1421,7 +1474,7 @@
                         // Other fiscal period configuration...
                     ];
                     $configSettingsId = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'create', [$settingsData]);
-                    $response = [ 'status' => 'success', 'id_created' => $configSettingsId];
+                    $response = [ 'statusCode' => 200, 'id_created' => $configSettingsId];
                     echo json_encode($response, JSON_PRETTY_PRINT);
 
                     // Update the 'res.config.settings' record to apply fiscal localization
@@ -1431,12 +1484,12 @@
                             'chart_template_id' => $chartTemplateId, // Replace with the ID of the desired chart template
                         ],
                     ]);
-                    $response = [ 'status' => 'success', 'settings_updated' => $updateSettings];
+                    $response = [ 'statusCode' => 200, 'settings_updated' => $updateSettings];
                     echo json_encode($response, JSON_PRETTY_PRINT);
 
                     // Apply fiscal localization and load chart of accounts
                     $localizationApplied = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'execute', [$configSettingsId]);
-                    $response = ['status' => 'success', 'localization_applied' => $localizationApplied];
+                    $response = ['statusCode' => 200, 'localization_applied' => $localizationApplied];
                     echo json_encode($response, JSON_PRETTY_PRINT);
                     
                  
@@ -1508,7 +1561,7 @@
             // echo json_encode($itemData, JSON_PRETTY_PRINT);
 
             $new_id = $models->execute_kw($db, $uid, $password, 'res.partner', 'create', $itemData); 
-            $response = [ 'status' => 'success', 'id_created' => $new_id];
+            $response = [ 'statusCode' => 200, 'id_created' => $new_id];
             echo json_encode($response, JSON_PRETTY_PRINT);
 
             }
@@ -1582,7 +1635,7 @@
                 // echo json_encode($itemData, JSON_PRETTY_PRINT);
 
                 $new_id = $models->execute_kw($db, $uid, $password, 'res.partner', 'create', $itemData); 
-                $response = [ 'status' => 'success', 'id_created' => $new_id];
+                $response = [ 'statusCode' => 200, 'id_created' => $new_id];
                 echo json_encode($response, JSON_PRETTY_PRINT);
 
             }
@@ -1777,7 +1830,7 @@
                 // Create the invoice using the extracted companyId and partnerId
                 $invoiceId = createInvoices($models, $uuid, $companyId, $partnerId, $invoiceNumber, $invoiceDate, $invoiceDateDue, $invoiceLines, $connection);
                 //echo "Invoice with ID: $invoiceId created." . PHP_EOL;
-                $response = ['loading' => 'success'];
+                $response = ['loading' => 200];
                 echo json_encode($response);
             }
 
@@ -1854,7 +1907,7 @@
 
                 $newProductId = $models->execute_kw($db, $uid, $password, 'product.product', 'create', [$productData]);
         
-                $response = [ 'status' => 'success', 'id_created' => $newProductId];
+                $response = [ 'statusCode' => 200, 'id_created' => $newProductId];
                 echo json_encode($response, JSON_PRETTY_PRINT);
 
             }
@@ -1923,7 +1976,7 @@
             // echo json_encode($itemData, JSON_PRETTY_PRINT);
 
             $new_id = $models->execute_kw($db, $uid, $password, 'res.partner', 'create', $itemData); 
-            $response = [ 'status' => 'success', 'id_created' => $new_id];
+            $response = [ 'statusCode' => 200, 'id_created' => $new_id];
             echo json_encode($response, JSON_PRETTY_PRINT);
 
             }
@@ -2003,16 +2056,16 @@
                         'amount' => $amount/100, // Amount of the payment
                     ];
                     $paymentRegisterId = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'create', [$paymentRegisterData], ['context' => $context]);
-                    $response = ['status' => 'success', 'payment_created' => $paymentRegisterId,];
+                    $response = ['statusCode' => 200, 'payment_created' => $paymentRegisterId,];
                     //   echo json_encode($response);
                     
                     // Create the payments based on the payment register
                     if (is_int($paymentRegisterId)) {
                         $regPayment = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'action_create_payments', [$paymentRegisterId]);
-                        $response = ['status' => 'success', 'payment_registered' => $regPayment,];
+                        $response = ['statusCode' => 200, 'payment_registered' => $regPayment,];
                         return $response;
                     }else{
-                        $response = ['status' => 'failed', 'payment_created' => $paymentRegisterId['faultString']];
+                        $response = ['statusCode' => 400, 'payment_created' => $paymentRegisterId['faultString']];
                         return $response;
                     }
                 }
@@ -2023,7 +2076,7 @@
         } catch (Exception $e) {
             // Output the error
             header('Content-Type: application/json', true, 500);
-            echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+            echo json_encode(['statusCode' => 500, 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
         }
     }
 
@@ -2183,7 +2236,7 @@
 
                 $newProductId = $models->execute_kw($db, $uid, $password, 'product.product', 'create', [$productData]);
         
-                $response = [ 'status' => 'success', 'id_created' => $newProductId];
+                $response = [ 'statusCode' => 200, 'id_created' => $newProductId];
                 echo json_encode($response, JSON_PRETTY_PRINT);
 
             }
@@ -2271,13 +2324,13 @@
                   'amount' => $amount/100, // Amount of the payment
               ];
               $paymentRegisterId = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'create', [$paymentRegisterData], ['context' => $context]);
-              $response = ['status' => 'success', 'payment_created' => $paymentRegisterId,];
+              $response = ['statusCode' => 200, 'payment_created' => $paymentRegisterId,];
               echo json_encode($response);
               
               // Create the payments based on the payment register
               if (is_int($paymentRegisterId)) {
                   $regPayment = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'action_create_payments', [$paymentRegisterId]);
-                  $response = ['status' => 'success', 'payment_registered' => $regPayment,];
+                  $response = ['statusCode' => 200, 'payment_registered' => $regPayment,];
                   echo json_encode($response);
               }
 
@@ -2370,13 +2423,13 @@
                   'amount' => $amount/100, // Amount of the payment
               ];
               $paymentRegisterId = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'create', [$paymentRegisterData], ['context' => $context]);
-              $response = ['status' => 'success', 'payment_created' => $paymentRegisterId,];
+              $response = ['statusCode' => 200, 'payment_created' => $paymentRegisterId,];
               echo json_encode($response);
               
               // Create the payments based on the payment register
               if (is_int($paymentRegisterId)) {
                   $regPayment = $models->execute_kw($db, $uid, $password, 'account.payment.register', 'action_create_payments', [$paymentRegisterId]);
-                  $response = ['status' => 'success', 'payment_registered' => $regPayment,];
+                  $response = ['statusCode' => 200, 'payment_registered' => $regPayment,];
                   echo json_encode($response);
               }
 
@@ -2421,13 +2474,13 @@
         // Create the payment method
         $newPaymentMethodId = $models->execute_kw($db, $uid, $password, 'account.payment.method', 'create', [$paymentMethodData]);
     
-        $response = ['status' => 'success', 'id_created' => $newPaymentMethodId];
+        $response = ['statusCode' => 200, 'id_created' => $newPaymentMethodId];
         return $response;
 
        } catch (Exception $e) {
            // Output the error
            header('Content-Type: application/json', true, 500);
-           echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+           echo json_encode(['statusCode' => 500, 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
        }
 
    }
@@ -2465,13 +2518,13 @@
             // Create the payment terms
             $newPaymentTermsId = $models->execute_kw($db, $uid, $password, 'account.payment.term', 'create', [$paymentTermsData]);
 
-            $response = ['status' => 'success', 'id_created' => $newPaymentTermsId];
+            $response = ['statusCode' => 200, 'id_created' => $newPaymentTermsId];
             return $response;
 
     } catch (Exception $e) {
         // Output the error
         header('Content-Type: application/json', true, 500);
-        echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
+        echo json_encode(['statusCode' => 500, 'message' => $e->getMessage()], JSON_PRETTY_PRINT);
    }
 
 }
