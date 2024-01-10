@@ -395,8 +395,8 @@
             // $companyId = json_encode($companyId);
 
             //search for invoice ID by uuid (search_read)
-            $postedBillId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['ref', '=', $invoiceNumber], ['company_id', '=', $companyId]]]);
-            // $postedBillId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['x_uuid', '=', $uuid]]]);
+            // $postedBillId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['ref', '=', $invoiceNumber], ['company_id', '=', $companyId]]]);
+            $postedBillId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['x_uuid', '=', $uuid]]]);
             
             if(!is_int($postedBillId[0])){
                 $response = [ 'statusCode' => 400, 'bill' => $postedBillId ];
@@ -563,6 +563,7 @@
         try {
             //posted fields
             $reference = $billInfo['reference'] ?? false;
+            $uuid = $billInfo['bill_uuid'];
             $company_uuid = $billInfo['company_id'];
             $reverse_reason = $billInfo['reason'];
 
@@ -579,7 +580,8 @@
              $companyId = $companyId[0] ?? false;
              // echo json_encode($companyId);
             //get invoice ID
-            $billId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['ref', '=', $reference], ['company_id', '=', intval($companyId)]]]);
+            // $billId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['ref', '=', $reference], ['company_id', '=', intval($companyId)]]]);
+            $billId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['x_uuid', '=', $uuid]]]);
 
             if(!is_int($billId[0])){
                 $response = [ 'statusCode' => 400, 'bill' => $billId ];
@@ -882,7 +884,7 @@
             $paymentMethod = $paymentInfo['payment_method'];
             $journalId = $paymentInfo['journalId'] ?? 8;
             $invoiceNumber = $paymentInfo['invoice_num'];
-            $invoice_uuid = $paymentInfo['invoice_uuid'];
+            $invoice_uuid = $paymentInfo['invoice_uuid'] ?? false;
             
             $partnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'search', [[['x_uuid', '=', $customerId]]]);
             $partnerId = $partnerId[0] ?? false;
@@ -902,7 +904,7 @@
             // $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['payment_reference', '=', $invoiceNum], ['company_id', '=', intval($companyId)]]]);
             $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['x_uuid', '=', $invoice_uuid]]]);
             $invoiceId = $invoiceId[0] ?? false;
-              
+
             if (!is_int($invoiceId)) {
                 $response = ['statusCode' => 400, 'invoice' => $invoiceId,];
                 return $response;
@@ -966,7 +968,6 @@
             $paymentDate = $paymentInfo['payment_date'];
             $amount = $paymentInfo['amount'];
             $paymentMethod = $paymentInfo['payment_method'];
-            $journalId = $paymentInfo['journalId'] ?? 8;
             $invoiceNumber = $paymentInfo['invoice_num'];
     
             $partnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'search', [[['x_uuid', '=', $customerId]]]);
@@ -982,8 +983,9 @@
             $paymentMethodId = $models->execute_kw($db, $uid, $password, 'account.payment.method.line', 'search', [[['payment_method_id', '=', intval($paymentMethod)], ['journal_id', '=', intval($journalId)]]]);
             $paymentMethodId = json_encode($paymentMethodId[0]);
               // Fetch invoice ID based on invoice number (e.g., 'INV/2023/00055')
-              $invoiceNum = $invoiceNumber;
-              $billId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['ref', '=', $invoiceNum], ['move_type', '=', 'in_invoice'], ['company_id', '=', intval($companyId)]]], );
+            //   $invoiceNum = $invoiceNumber;
+            //   $billId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['ref', '=', $invoiceNum], ['move_type', '=', 'in_invoice'], ['company_id', '=', intval($companyId)]]], );
+              $billId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['x_uuid', '=', $uuid]]], );
               $billId = $billId[0] ?? false;
 
               if (!is_int($billId)) {
@@ -998,7 +1000,7 @@
               
               // Create the payment register record
               $paymentRegisterData = [
-                  'x_uuid' => $uuid ?? false,
+                  'x_uuid' => $uuid,
                   'company_id' => intval($companyId), // ID of the company associated
                   'partner_id' => $partnerId, // ID of the customer or partner
                   'payment_date' => $paymentDate, // Date of the payment (YYYY-MM-DD format)
