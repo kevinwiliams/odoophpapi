@@ -166,6 +166,11 @@
             $accountId = $models->execute_kw($db, $uid, $password, 'account.account', 'search', [[['name', '=', 'Product Sales'], ['company_id', '=', intval($companyId)]]]);
             $accountId = $accountId[0] ?? false;
             // echo 'ACID:'.($accountId);
+
+            if (!is_int($accountId)) {
+                $response = [ 'statusCode' => 400, 'account_id' => 'Product Sales not found. Check accounting package' ];
+                return $response;
+            }
             
             //create invoice with associated partner_id/customer
             $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'create', [['move_type' => 'out_invoice', 'partner_id' => $partnerId, 'company_id' => intval($companyId)]]); 
@@ -1068,9 +1073,18 @@
             $accountId = $models->execute_kw($db, $uid, $password, 'account.account', 'search', [[['name', '=', 'Expenses'], ['company_id', '=', $companyId]]]);
             $accountId = $accountId[0] ?? false;
 
+            if (!is_int($accountId)) {
+                $response = [ 'statusCode' => 400, 'account_id' => 'Expenses not found. Check accounting package' ];
+                return $response;
+            }
 
             $journalId = $models->execute_kw($db, $uid, $password, 'account.journal', 'search', [[['code', '=', 'BILL'], ['company_id', '=', intval($companyId)]]]);
             $journalId = $journalId[0] ?? false;
+
+            if (!is_int(intval($journalId))) {
+                $response = [ 'statusCode' => 400, 'journal_id' => 'Bill code not found. Check accounting package' ];
+                return $response;
+            }
      
             //create invoice with associated partner_id/customer
             $billData = [
