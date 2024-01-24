@@ -284,14 +284,18 @@
             // Fetch company id based on VM UUID
             $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $company_uuid]]]);
             $companyId = $companyId[0] ?? false;
-            //    echo 'COMP:'.($companyId);
+
+            if (!is_int($companyId)) {
+                $response = [ 'statusCode' => 400, 'company' => 'Company not found' ];
+                return $response;
+            }
 
             //search for invoice ID by uuid (search_read)
             $postedInvoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['x_uuid', '=', $uuid]]]); 
             // $postedInvoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['name', '=', $invoiceNumber], ['company_id', '=', $companyId] ]]); 
             //echo json_encode($postedInvoiceId);
             if (!is_int(($postedInvoiceId[0]))) {
-                $response = [ 'statusCode' => 400, 'posted_invoice' => $postedInvoiceId ];
+                $response = [ 'statusCode' => 400, 'posted_invoice' => 'UUID missing/not found' ];
                 return $response;
             }
              // Create a new draft invoice based on the posted invoice
@@ -419,13 +423,16 @@
             $partnerData = $models->execute_kw($db, $uid, $password, 'res.partner', 'read', [$partnerId], ['fields' => ['company_id']]);
             $companyId = $partnerData[0]['company_id'][0];
             // $companyId = json_encode($companyId);
-
+            if (!is_int($companyId)) {
+                $response = [ 'statusCode' => 400, 'company' => 'Company not found' ];
+                return $response;
+            }
             //search for invoice ID by uuid (search_read)
             // $postedBillId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['ref', '=', $invoiceNumber], ['company_id', '=', $companyId]]]);
             $postedBillId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['x_uuid', '=', $uuid]]]);
             
             if(!is_int($postedBillId[0])){
-                $response = [ 'statusCode' => 400, 'bill' => $postedBillId ];
+                $response = [ 'statusCode' => 400, 'bill' => 'UUID missing/not found' ];
                 return $response;
             }
             // echo json_encode($postedBillId);
@@ -452,9 +459,7 @@
             // Remove the line item from the invoice.
             $models->execute_kw($db, $uid, $password, 'account.move', 'write', [[$draftBillId], [ 'invoice_line_ids' => $old_line_ids]]);
             // echo json_encode($updatedInvoice);
-            
-            
-        
+                    
             $accountId = $models->execute_kw($db, $uid, $password, 'account.account', 'search', [[['name', '=', 'Expenses'], ['company_id', '=', $companyId]]]);
             $accountId = $accountId[0] ?? false;
 
@@ -843,9 +848,19 @@
            $companyId = $models->execute_kw($db, $uid, $password, 'res.company', 'search', [[['x_uuid', '=', $company]]]);
            $companyId = $companyId[0] ?? false;
 
+           if (!is_int($companyId)) {
+                $response = [ 'statusCode' => 400, 'company' => 'Company not found' ];
+                return $response;
+            }
+
            // Fetch partner data based on VM UUID
            $partnerId = $models->execute_kw($db, $uid, $password, 'res.partner', 'search', [[['x_uuid', '=', $uuid]]]);
            $partnerId = $partnerId[0] ?? false;
+
+           if (!is_int($partnerId)) {
+                $response = [ 'statusCode' => 400, 'partner' => 'User not found' ];
+                return $response;
+            }
 
            $itemData = 
                    [
@@ -862,6 +877,11 @@
             //update vendor product
             $productId = $models->execute_kw($db, $uid, $password, 'product.product', 'search', [[['x_uuid', '=', $uuid]]]);
            $productId = $productId[0] ?? false;
+
+           if (!is_int($productId)) {
+                $response = [ 'statusCode' => 400, 'product' => 'Product not found' ];
+                return $response;
+            }
 
            //Create product with vendor details
            $productCode = generateCode($name, $companyId);
@@ -931,16 +951,15 @@
             $paymentMethodId = $models->execute_kw($db, $uid, $password, 'account.payment.method.line', 'search', [[['payment_method_id', '=', intval($paymentMethod)], ['journal_id', '=', intval($journalId)]]]);
             $paymentMethodId = json_encode($paymentMethodId[0]);
               // Fetch invoice ID based on invoice number (e.g., 'INV/2023/00055')
-            $invoiceNum = $invoiceNumber;
             // $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['payment_reference', '=', $invoiceNum], ['company_id', '=', intval($companyId)]]]);
             $invoiceId = $models->execute_kw($db, $uid, $password, 'account.move', 'search', [[['x_uuid', '=', $invoice_uuid]]]);
             $invoiceId = $invoiceId[0] ?? false;
-
+            
             if (!is_int($invoiceId)) {
-                $response = ['statusCode' => 400, 'invoice' => $invoiceId,];
+                $response = ['statusCode' => 400, 'invoice' => 'UUID missing/not found',];
                 return $response;
             }
-             
+
               $context = [
                   'active_model' => 'account.move',
                   'active_id' => $invoiceId,
@@ -1018,7 +1037,7 @@
               $billId = $billId[0] ?? false;
 
               if (!is_int($billId)) {
-                $response = ['statusCode' => 400, 'bill' => $billId,];
+                $response = ['statusCode' => 400, 'bill' => 'UUID missing/not found',];
                 return $response;
             }
 
