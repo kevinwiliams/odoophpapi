@@ -76,7 +76,6 @@
    
                // Create the date string in the format "YYYY-MM-DD"
                $lockDate = $currentYear . '-' . $firstMonth . '-' . $firstDay;
-          
 
                $available_chart_templates = $models->execute_kw($db, $uid, $password, 'account.chart.template', 'search', [[['visible', '=', true]]] );
                $chartTemplateId = $available_chart_templates[0] ?? false;
@@ -90,24 +89,15 @@
                    'chart_template_id' => $chartTemplateId
                    // Other fiscal period configuration...
                ];
-
+            //    Create settings
                $configSettingsId = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'create', [$settingsData]);
-            //    $response = [ 'statusCode' => 200, 'res.config.id_created' => $configSettingsId];
-            //    echo json_encode($response, JSON_PRETTY_PRINT);
-
+            //    Trigger journal installation by reading the settings
                $configSettings = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'read', [$configSettingsId]);
-            //    $response = [ 'statusCode' => 200, 'res.config.settings' => $configSettings];
-            //    echo json_encode($response, JSON_PRETTY_PRINT);
-               
-               $context = [
-                'module' => 'account',
-                'allowed_company_ids' => [$newCompanyId],
-                ];
-   
                // Apply fiscal localization and load chart of accounts
+               $context = ['module' => 'account', 'allowed_company_ids' => [$newCompanyId]];
                $localizationApplied = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'execute', [[$configSettingsId]], ['context' => $context]);
-            //    $response = ['statusCode' => 200, 'localization_applied' => $localizationApplied];
-            //    echo json_encode($response, JSON_PRETTY_PRINT);
+                // Update company back to default currency after chart of accounts installation
+                $updateCurrency = $models->execute_kw($db, $uid, $password, 'res.company', 'write', [[$newCompanyId], ['currency_id' => $currenyId]]);
 
            }else{
             $response = ['statusCode' => 400, 'company_id_created' => $newCompanyId['faultString']];
