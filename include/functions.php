@@ -77,44 +77,38 @@
                // Create the date string in the format "YYYY-MM-DD"
                $lockDate = $currentYear . '-' . $firstMonth . '-' . $firstDay;
           
-               $chartTemplateId = 1;
+
+               $available_chart_templates = $models->execute_kw($db, $uid, $password, 'account.chart.template', 'search', [[['visible', '=', true]]] );
+               $chartTemplateId = $available_chart_templates[0] ?? false;
+
                // Configure fiscal period
                $settingsData = [
                    'company_id' => $newCompanyId,
                    'fiscalyear_last_day' => $fiscalLastDay, // Last day of the fiscal year
                    'fiscalyear_last_month' => "12", // Last month of the fiscal year
                    'fiscalyear_lock_date' => $lockDate, // Lock date for fiscal year
+                   'chart_template_id' => $chartTemplateId
                    // Other fiscal period configuration...
                ];
+
                $configSettingsId = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'create', [$settingsData]);
-               $response = [ 'statusCode' => 200, 'id_created' => $configSettingsId];
-               // echo json_encode($response, JSON_PRETTY_PRINT);
-   
-               // Update the 'res.config.settings' record to apply fiscal localization
-               $updateSettings = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'write', [
-                   [$configSettingsId],
-                   [
-                       'chart_template_id' => $chartTemplateId, // Replace with the ID of the desired chart template
-                   ],
-               ]);
-               $response = [ 'statusCode' => 200, 'settings_updated' => $updateSettings];
-               // echo json_encode($response, JSON_PRETTY_PRINT);
-   
-               // Update the company's chart template
-               // echo ' compID: '.$newCompanyId;
-               // echo ' chartID: '.$chartTemplateId;
-               // $applyChartTemp = $models->execute_kw($db, $uid, $password, 'res.company', 'write', [[$newCompanyId], ['chart_template_id' => $chartTemplateId]]);
-               // $response = ['statusCode' => 200, 'chart_template_applied' => $applyChartTemp];
-               // echo json_encode($response, JSON_PRETTY_PRINT);
+            //    $response = [ 'statusCode' => 200, 'res.config.id_created' => $configSettingsId];
+            //    echo json_encode($response, JSON_PRETTY_PRINT);
+
+               $configSettings = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'read', [$configSettingsId]);
+            //    $response = [ 'statusCode' => 200, 'res.config.settings' => $configSettings];
+            //    echo json_encode($response, JSON_PRETTY_PRINT);
+               
+               $context = [
+                'module' => 'account',
+                'allowed_company_ids' => [$newCompanyId],
+                ];
    
                // Apply fiscal localization and load chart of accounts
-               $localizationApplied = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'execute', [$configSettingsId]);
-               $response = ['statusCode' => 200, 'localization_applied' => $localizationApplied];
-               // echo json_encode($response, JSON_PRETTY_PRINT);
-               
-               // $updatedSettings = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'execute', [$configSettingsId]);
-               // $response = [ 'statusCode' => 200, 'is_exe' => $updatedSettings];
-               // echo json_encode($response, JSON_PRETTY_PRINT);
+               $localizationApplied = $models->execute_kw($db, $uid, $password, 'res.config.settings', 'execute', [[$configSettingsId]], ['context' => $context]);
+            //    $response = ['statusCode' => 200, 'localization_applied' => $localizationApplied];
+            //    echo json_encode($response, JSON_PRETTY_PRINT);
+
            }else{
             $response = ['statusCode' => 400, 'company_id_created' => $newCompanyId['faultString']];
             return $response;
