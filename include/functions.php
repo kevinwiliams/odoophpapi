@@ -309,8 +309,9 @@
             $models->execute_kw($db, $uid, $password, 'account.move', 'unlink', [[$postedInvoiceId[0]]]);
             // echo json_encode($draftOldInvoice);
 
-            $invoiceData = $models->execute_kw($db, $uid, $password, 'account.move', 'read', [$draftInvoiceId], ['fields' => ['invoice_line_ids']]);
+            $invoiceData = $models->execute_kw($db, $uid, $password, 'account.move', 'read', [$draftInvoiceId], ['fields' => ['name', 'invoice_line_ids']]);
             $line_ids = $invoiceData[0]['invoice_line_ids'];
+            $old_invoice_number = $invoiceData[0]['name'];
 
             $old_line_ids = [];
             foreach ($line_ids as $line) {
@@ -361,7 +362,8 @@
             }
             $invoiceData = [
                 'x_uuid' => $uuid,
-                'name' => $invoiceNumber,
+                'name' => $old_invoice_number,
+                'payment_reference' => $invoiceNumber,
                 'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format) //default to today's date if not set
                 'invoice_date_due' =>  $invoiceDateDue,
                 'company_id' => intval($companyId), // Company associated with the invoice
