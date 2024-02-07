@@ -215,7 +215,8 @@
 
                 $invoiceData = [
                     'x_uuid' => $uuid,
-                    'name' => $invoiceNumber,
+                    // 'name' => $invoiceNumber,
+                    'payment_reference' => $invoiceNumber,
                     'invoice_date' => $invoiceDate, // Date of the invoice (YYYY-MM-DD format) //default to today's date if not set
                     'invoice_date_due' =>  $invoiceDateDue,
                     'company_id' => intval($companyId), // Company associated with the invoice
@@ -235,7 +236,11 @@
                     $postedInvoice = $models->execute_kw($db, $uid, $password, 'account.move', 'action_post', [$invoiceId]);
 
                     if($postedInvoice == false){
-                        $response = [ 'statusCode' => 200, 'invoice' => 'posted' ];
+                        // get generated invoice number
+                        $invoiceData = $models->execute_kw($db, $uid, $password, 'account.move', 'read', [$invoiceId], ['fields' => ['name']]);
+                        $genInvoiceNumer = $invoiceData[0]['name'];
+
+                        $response = [ 'statusCode' => 200, 'invoice_number' => $genInvoiceNumer, 'invoice' => 'posted' ];
                         return $response;
                     }else
                     {
