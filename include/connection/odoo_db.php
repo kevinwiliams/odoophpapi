@@ -20,6 +20,12 @@
             'db' => 'Test',
             'username' => '',
             'password' => '',
+       ],
+        'vm_uat' => [
+            'url' => '.com/',
+            'db' => 'odoouat',
+            'username' => '',
+            'password' => '',
         ]
     ];
 
