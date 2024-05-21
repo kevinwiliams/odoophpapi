@@ -9,7 +9,7 @@
             'url' => 'https://odoophpapi.test/'
         ],
         'vm_dev' => [
-            'url' => 'https://paperless.vminnovations.dev/pm-api/'
+            'url' => 'https://accounting.demo.propmanweb.com/pm-api/'
         ]
     ];
 
